@@ -130,6 +130,12 @@ button:active {
   border-bottom: 2px solid #2563eb !important;
 }
 
+/* ─── Spinner ─────────────────────────────────────────────────────────────── */
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
 /* ─── Responsive ──────────────────────────────────────────────────────────── */
 
 @media (max-width: 640px) {

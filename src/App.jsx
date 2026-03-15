@@ -428,6 +428,64 @@ function downloadFile(filename, content) {
   URL.revokeObjectURL(url);
 }
 
+// ─── YAML Refresh & Download Utilities ───────────────────────────────────────
+
+function stripYamlFrontMatter(content) {
+  return content.replace(/^---\n[\s\S]*?\n---\n*/, "");
+}
+
+function refreshYaml(chapter, book) {
+  const stripped = stripYamlFrontMatter(chapter.markdownContent);
+  return buildYamlHeader(chapter, book) + stripped;
+}
+
+function generateCombinedMarkdown(chapters, book) {
+  const done = [...chapters]
+    .filter(c => c.status === "done")
+    .sort((a, b) => a.chapterNum - b.chapterNum);
+  const parts = [
+    `# ${book.title || "Untitled Book"}`,
+    "",
+    `*${book.author || "Unknown Author"}*`,
+    "",
+  ];
+  for (const ch of done) {
+    parts.push("---", "");
+    parts.push(`# Chapter ${ch.chapterNum}: ${ch.title}`);
+    parts.push("");
+    parts.push(stripYamlFrontMatter(ch.markdownContent));
+    parts.push("");
+  }
+  return parts.join("\n");
+}
+
+async function generateZip(chapters, book) {
+  const JSZip = (await import("jszip")).default;
+  const zip = new JSZip();
+  const done = [...chapters]
+    .filter(c => c.status === "done")
+    .sort((a, b) => a.chapterNum - b.chapterNum);
+  for (const ch of done) {
+    const fn = `${String(ch.chapterNum).padStart(2, "0")}-${ch.slug}.md`;
+    zip.file(fn, refreshYaml(ch, book));
+  }
+  if (done.length > 0) {
+    zip.file("00-index.md", buildIndexFile(done, book));
+  }
+  zip.file("00-complete-book.md", generateCombinedMarkdown(chapters, book));
+  const blob = await zip.generateAsync({ type: "blob" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${slugify(book.title || "book")}-markdown.zip`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+// ─── DOCX Conversion ─────────────────────────────────────────────────────────
+
 async function convertDocx(file) {
   const arrayBuffer = await file.arrayBuffer();
 
@@ -482,44 +540,6 @@ async function convertDocx(file) {
 
 // ─── Components ──────────────────────────────────────────────────────────────
 
-const STEPS = ["upload", "configure", "output"];
-const STEP_LABELS = ["Upload Files", "Configure Chapters", "Convert & Download"];
-
-function StepIndicator({ current, onNav }) {
-  return (
-    <div style={{ display: "flex", gap: 0, marginBottom: 32 }}>
-      {STEPS.map((step, i) => {
-        const active = STEPS.indexOf(current) >= i;
-        const isCurrent = current === step;
-        return (
-          <button
-            key={step}
-            onClick={() => onNav(step)}
-            style={{
-              flex: 1,
-              padding: "14px 8px",
-              background: isCurrent ? "var(--accent)" : active ? "var(--accent-dim)" : "var(--card)",
-              color: isCurrent ? "#fff" : active ? "var(--accent)" : "var(--muted)",
-              border: "1px solid var(--border)",
-              borderRight: i < 2 ? "none" : "1px solid var(--border)",
-              borderRadius: i === 0 ? "8px 0 0 8px" : i === 2 ? "0 8px 8px 0" : 0,
-              cursor: "pointer",
-              fontSize: 13,
-              fontWeight: isCurrent ? 700 : 500,
-              fontFamily: "var(--font-body)",
-              letterSpacing: "0.02em",
-              transition: "all 0.2s",
-            }}
-          >
-            <span style={{ opacity: 0.6, marginRight: 6 }}>{i + 1}.</span>
-            {STEP_LABELS[i]}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
 function BookMeta({ book, onChange }) {
   return (
     <div style={{ display: "flex", gap: 12, marginBottom: 20 }}>
@@ -545,12 +565,13 @@ function BookMeta({ book, onChange }) {
   );
 }
 
-function UploadZone({ onFiles }) {
+function UploadZone({ onFiles, compact }) {
   const [dragOver, setDragOver] = useState(false);
   const inputRef = useRef(null);
   const handleDrop = useCallback(
     e => {
       e.preventDefault();
+      if (!e.dataTransfer.types.includes("Files")) return;
       setDragOver(false);
       const files = Array.from(e.dataTransfer.files).filter(
         f => f.name.endsWith(".docx") || f.name.endsWith(".pdf")
@@ -559,9 +580,68 @@ function UploadZone({ onFiles }) {
     },
     [onFiles]
   );
+  const handleFileInput = e => {
+    const files = Array.from(e.target.files);
+    if (files.length) onFiles(files);
+  };
+
+  if (compact) {
+    return (
+      <div
+        onDragOver={e => {
+          if (!e.dataTransfer.types.includes("Files")) return;
+          e.preventDefault();
+          setDragOver(true);
+        }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={handleDrop}
+        onClick={() => inputRef.current?.click()}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 12,
+          padding: "12px 16px",
+          borderBottom: `2px ${dragOver ? "solid var(--accent)" : "dashed var(--border)"}`,
+          cursor: "pointer",
+          background: dragOver ? "var(--accent-bg)" : "transparent",
+          transition: "all 0.25s ease",
+          marginBottom: 16,
+        }}
+      >
+        <input
+          ref={inputRef}
+          type="file"
+          multiple
+          accept=".docx,.pdf"
+          style={{ display: "none" }}
+          onChange={handleFileInput}
+        />
+        <span style={{
+          fontSize: 20,
+          width: 32,
+          height: 32,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          borderRadius: 6,
+          background: "var(--accent-bg)",
+          color: "var(--accent)",
+          fontWeight: 700,
+        }}>+</span>
+        <span style={{ fontSize: 13, color: "var(--muted)", fontFamily: "var(--font-body)" }}>
+          Drop more files or click to add
+        </span>
+      </div>
+    );
+  }
+
   return (
     <div
-      onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+      onDragOver={e => {
+        if (!e.dataTransfer.types.includes("Files")) return;
+        e.preventDefault();
+        setDragOver(true);
+      }}
       onDragLeave={() => setDragOver(false)}
       onDrop={handleDrop}
       onClick={() => inputRef.current?.click()}
@@ -582,10 +662,7 @@ function UploadZone({ onFiles }) {
         multiple
         accept=".docx,.pdf"
         style={{ display: "none" }}
-        onChange={e => {
-          const files = Array.from(e.target.files);
-          if (files.length) onFiles(files);
-        }}
+        onChange={handleFileInput}
       />
       <div style={{ fontSize: 36, marginBottom: 8 }}>&#128196;</div>
       <div style={{ fontSize: 15, color: "var(--text)", fontWeight: 600, fontFamily: "var(--font-body)" }}>
@@ -598,7 +675,7 @@ function UploadZone({ onFiles }) {
   );
 }
 
-function ChapterRow({ ch, index, total, onUpdate, onRemove, onMove, onDragStart, onDragOver, onDragEnd, onDrop, dragOverPos }) {
+function ChapterRow({ ch, index, total, onUpdate, onRemove, onMove, onPreview, onDownload, onDragStart, onDragOver, onDragEnd, onDrop, dragOverPos }) {
   const [expanded, setExpanded] = useState(false);
   const [topicInput, setTopicInput] = useState("");
   const [termInput, setTermInput] = useState("");
@@ -631,10 +708,14 @@ function ChapterRow({ ch, index, total, onUpdate, onRemove, onMove, onDragStart,
         animationDelay: `${index * 40}ms`,
       }}
       onDragOver={e => {
+        if (e.dataTransfer.types.includes("Files")) return;
         e.preventDefault();
         onDragOver(e, index);
       }}
-      onDrop={e => onDrop(e, index)}
+      onDrop={e => {
+        if (e.dataTransfer.types.includes("Files")) return;
+        onDrop(e, index);
+      }}
     >
       <div
         draggable
@@ -668,14 +749,34 @@ function ChapterRow({ ch, index, total, onUpdate, onRemove, onMove, onDragStart,
           {ch.title || ch.fileName}
         </span>
         <span style={{ fontSize: 11, color: "var(--muted)", fontFamily: "var(--font-mono)" }}>{ch.fileName}</span>
-        <span
-          style={{
-            width: 8,
-            height: 8,
+        {ch.status === "converting" ? (
+          <span style={{
+            width: 12,
+            height: 12,
+            border: "2px solid var(--accent-dim)",
+            borderTopColor: "var(--accent)",
             borderRadius: "50%",
-            background: statusColors[ch.status] || "var(--muted)",
-          }}
-        />
+            animation: "spin 0.6s linear infinite",
+            display: "inline-block",
+            flexShrink: 0,
+          }} />
+        ) : (
+          <span
+            style={{
+              width: 8,
+              height: 8,
+              borderRadius: "50%",
+              background: statusColors[ch.status] || "var(--muted)",
+              flexShrink: 0,
+            }}
+          />
+        )}
+        {ch.status === "done" && (
+          <>
+            <button style={linkBtnStyle} onClick={e => { e.stopPropagation(); onPreview(ch); }} title="Preview">Preview</button>
+            <button style={linkBtnStyle} onClick={e => { e.stopPropagation(); onDownload(ch); }} title="Download">&#11015;</button>
+          </>
+        )}
         <span style={{ fontSize: 12, color: "var(--muted)", transform: expanded ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}>&#9660;</span>
       </div>
       <div
@@ -771,142 +872,64 @@ function ChapterRow({ ch, index, total, onUpdate, onRemove, onMove, onDragStart,
   );
 }
 
-function OutputView({ chapters, book, converting, onConvert }) {
-  const converted = chapters.filter(c => c.status === "done");
-  const pdfNotice = chapters.filter(c => c.status === "pdf-notice");
-  const errors = chapters.filter(c => c.status === "error");
-  const [preview, setPreview] = useState(null);
+function DownloadBar({ chapters, book, converting }) {
+  const done = chapters.filter(c => c.status === "done");
+  const total = chapters.filter(c => c.fileType === "docx").length;
 
-  const indexContent = converted.length ? buildIndexFile(converted, book) : null;
-
-  const downloadAll = () => {
-    converted.forEach(ch => {
-      const fn = `${String(ch.chapterNum).padStart(2, "0")}-${ch.slug}.md`;
-      downloadFile(fn, ch.markdownContent);
+  const downloadAllIndividual = () => {
+    const sorted = [...done].sort((a, b) => a.chapterNum - b.chapterNum);
+    sorted.forEach((ch, i) => {
+      setTimeout(() => {
+        const fn = `${String(ch.chapterNum).padStart(2, "0")}-${ch.slug}.md`;
+        downloadFile(fn, refreshYaml(ch, book));
+      }, i * 200);
     });
-    if (indexContent) {
-      setTimeout(() => downloadFile("00-index.md", indexContent), 300);
+    if (sorted.length > 0) {
+      setTimeout(() => {
+        downloadFile("00-index.md", buildIndexFile(sorted, book));
+      }, sorted.length * 200);
     }
   };
 
   return (
-    <div className="fade-in">
-      <div style={{ display: "flex", gap: 12, marginBottom: 20, alignItems: "center" }}>
-        <button style={primaryBtnStyle} onClick={onConvert} disabled={converting}>
-          {converting ? "Converting\u2026" : `Convert ${chapters.length} Chapter${chapters.length !== 1 ? "s" : ""}`}
-        </button>
-        {converted.length > 0 && (
-          <button style={secondaryBtnStyle} onClick={downloadAll}>
-            &#11015; Download All ({converted.length + 1} files)
-          </button>
-        )}
-      </div>
-
-      {converting && (
-        <div style={{
-          padding: 16,
-          background: "var(--accent-bg)",
-          borderRadius: 8,
-          marginBottom: 16,
-          fontSize: 13,
-          fontFamily: "var(--font-body)",
-          color: "var(--accent)",
-          backgroundImage: "linear-gradient(90deg, var(--accent-bg) 0%, var(--accent-dim) 50%, var(--accent-bg) 100%)",
-          backgroundSize: "200% 100%",
-          animation: "shimmer 1.5s infinite",
-        }}>
-          Converting files via mammoth.js&hellip; DOCX files convert in-browser. PDF files require CLI tools (Marker or PyMuPDF4LLM).
-        </div>
-      )}
-
-      {pdfNotice.length > 0 && (
-        <div style={{ padding: 16, background: "#fef3c7", borderRadius: 8, marginBottom: 16, fontSize: 13, fontFamily: "var(--font-body)", color: "#92400e" }}>
-          <strong>{pdfNotice.length} PDF file{pdfNotice.length > 1 ? "s" : ""} skipped.</strong> Browser-based PDF conversion lacks the structural detection that Marker provides. Use the CLI toolkit (<code>convert.py</code>) for PDF files.
-        </div>
-      )}
-
-      {errors.length > 0 && (
-        <div style={{ padding: 16, background: "#fef2f2", borderRadius: 8, marginBottom: 16, fontSize: 13, fontFamily: "var(--font-body)", color: "#991b1b" }}>
-          <strong>{errors.length} file{errors.length > 1 ? "s" : ""} failed.</strong> Check the console for details.
-        </div>
-      )}
-
-      {/* File list */}
-      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-        {indexContent && (
-          <div style={fileRowStyle} className="fade-slide-in">
-            <span style={{ fontFamily: "var(--font-mono)", fontSize: 13, flex: 1, color: "var(--text)" }}>00-index.md</span>
-            <span style={{ fontSize: 12, color: "var(--muted)", fontFamily: "var(--font-body)" }}>Index</span>
-            <button style={linkBtnStyle} onClick={() => setPreview({ name: "00-index.md", content: indexContent })}>Preview</button>
-            <button style={linkBtnStyle} onClick={() => downloadFile("00-index.md", indexContent)}>&#11015;</button>
-          </div>
-        )}
-        {[...chapters].sort((a, b) => a.chapterNum - b.chapterNum).map((ch, i) => {
-          const fn = `${String(ch.chapterNum).padStart(2, "0")}-${ch.slug}.md`;
-          const done = ch.status === "done";
-          return (
-            <div
-              key={ch.id}
-              className="fade-slide-in"
-              style={{
-                ...fileRowStyle,
-                opacity: done ? 1 : 0.5,
-                animationDelay: `${(i + 1) * 50}ms`,
-              }}
-            >
-              <span style={{ fontFamily: "var(--font-mono)", fontSize: 13, flex: 1, color: "var(--text)" }}>{fn}</span>
-              <span style={{ fontSize: 12, color: "var(--muted)", fontFamily: "var(--font-body)" }}>{ch.title}</span>
-              <span style={{
-                fontSize: 10,
-                fontFamily: "var(--font-mono)",
-                padding: "2px 6px",
-                borderRadius: 4,
-                background: done ? "#dcfce7" : ch.status === "pdf-notice" ? "#fef3c7" : ch.status === "error" ? "#fef2f2" : "var(--card)",
-                color: done ? "#166534" : ch.status === "pdf-notice" ? "#92400e" : ch.status === "error" ? "#991b1b" : "var(--muted)",
-              }}>
-                {ch.status === "done" ? "\u2713" : ch.status === "pdf-notice" ? "PDF" : ch.status === "error" ? "\u2717" : "\u2014"}
-              </span>
-              {done && <button style={linkBtnStyle} onClick={() => setPreview({ name: fn, content: ch.markdownContent })}>Preview</button>}
-              {done && <button style={linkBtnStyle} onClick={() => downloadFile(fn, ch.markdownContent)}>&#11015;</button>}
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Preview modal */}
-      {preview && (
-        <div
-          style={{
-            position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 1000,
-            display: "flex", justifyContent: "center", alignItems: "center", padding: 24,
-            animation: "fadeIn 0.15s ease",
-          }}
-          onClick={() => setPreview(null)}
-        >
-          <div
-            style={{
-              background: "var(--bg)", borderRadius: 12, width: "100%", maxWidth: 720,
-              maxHeight: "80vh", display: "flex", flexDirection: "column",
-              border: "1px solid var(--border)",
-              boxShadow: "0 24px 64px rgba(0,0,0,0.2)",
-              animation: "fadeSlideIn 0.2s ease",
-            }}
-            onClick={e => e.stopPropagation()}
-          >
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 20px", borderBottom: "1px solid var(--border)" }}>
-              <span style={{ fontFamily: "var(--font-mono)", fontSize: 14, fontWeight: 700, color: "var(--text)" }}>{preview.name}</span>
-              <button style={{ ...linkBtnStyle, fontSize: 18 }} onClick={() => setPreview(null)}>&times;</button>
-            </div>
-            <pre style={{
-              flex: 1, overflow: "auto", padding: 20, margin: 0,
-              fontFamily: "var(--font-mono)", fontSize: 12, lineHeight: 1.6,
-              color: "var(--text)", whiteSpace: "pre-wrap", wordBreak: "break-word",
-            }}>
-              {preview.content}
-            </pre>
-          </div>
-        </div>
-      )}
+    <div style={{
+      display: "flex",
+      alignItems: "center",
+      gap: 10,
+      padding: "14px 0",
+      marginBottom: 16,
+      borderBottom: "1px solid var(--border)",
+      flexWrap: "wrap",
+    }}>
+      <button
+        style={{ ...primaryBtnStyle, opacity: done.length === 0 ? 0.5 : 1 }}
+        onClick={() => generateZip(chapters, book)}
+        disabled={done.length === 0}
+      >
+        &#128230; Download Zip
+      </button>
+      <button
+        style={{ ...secondaryBtnStyle, opacity: done.length === 0 ? 0.5 : 1 }}
+        onClick={() => {
+          const combined = generateCombinedMarkdown(chapters, book);
+          downloadFile("00-complete-book.md", combined);
+        }}
+        disabled={done.length === 0}
+      >
+        &#11015; Combined
+      </button>
+      <button
+        style={{ ...linkBtnStyle, opacity: done.length === 0 ? 0.5 : 1 }}
+        onClick={downloadAllIndividual}
+        disabled={done.length === 0}
+      >
+        All Individual
+      </button>
+      <span style={{ marginLeft: "auto", fontSize: 12, color: "var(--muted)", fontFamily: "var(--font-body)" }}>
+        {converting
+          ? `Converting ${done.length} of ${total}\u2026`
+          : `${done.length} file${done.length !== 1 ? "s" : ""} ready`}
+      </span>
     </div>
   );
 }
@@ -1012,11 +1035,18 @@ const fileRowStyle = {
 // ─── Main App ────────────────────────────────────────────────────────────────
 
 export default function RAGConverter() {
-  const [step, setStep] = useState("upload");
   const [book, setBook] = useState({ title: "", author: "" });
   const [chapters, setChapters] = useState([]);
   const [converting, setConverting] = useState(false);
+  const [preview, setPreview] = useState(null);
   const [dragState, setDragState] = useState({ sourceIndex: null, overIndex: null, overPos: null });
+
+  const chaptersRef = useRef(chapters);
+  chaptersRef.current = chapters;
+  const bookRef = useRef(book);
+  bookRef.current = book;
+  const convertingRef = useRef(false);
+  const conversionTimeoutRef = useRef(null);
 
   const addFiles = useCallback((files) => {
     const inferred = applyBatchConsensus(files);
@@ -1125,50 +1155,108 @@ export default function RAGConverter() {
     handleDragEnd();
   }, [dragState.overPos, handleDragEnd]);
 
+  // ─── Auto-conversion ───
   const runConversion = useCallback(async () => {
+    if (convertingRef.current) return;
+    convertingRef.current = true;
     setConverting(true);
-    const updated = [...chapters];
-    for (let i = 0; i < updated.length; i++) {
-      const ch = { ...updated[i] };
-      if (ch.fileType === "pdf") {
-        ch.status = "pdf-notice";
-        updated[i] = ch;
-        setChapters([...updated]);
-        continue;
-      }
-      ch.status = "converting";
-      updated[i] = ch;
-      setChapters([...updated]);
+
+    // Mark PDFs as pdf-notice
+    setChapters(prev => prev.map(ch =>
+      ch.fileType === "pdf" && ch.status === "pending"
+        ? { ...ch, status: "pdf-notice" }
+        : ch
+    ));
+
+    // Get pending DOCX files to convert
+    const toConvert = chaptersRef.current.filter(c => c.status === "pending" && c.fileType === "docx");
+
+    for (const ch of toConvert) {
+      setChapters(prev => prev.map(c => c.id === ch.id ? { ...c, status: "converting" } : c));
+
       try {
         const { md: rawMd, numberingLevels, hasHeadingStyles } = await convertDocx(ch.file);
         let md = rawMd;
         const detectedTitle = extractFirstHeading(md);
-        if (detectedTitle && !ch.title) {
-          ch.title = detectedTitle;
-          ch.slug = slugify(detectedTitle);
-        }
+
         md = normalizeHeadings(md);
-        // Only use text-based detection if mammoth didn't find heading styles
         if (!hasHeadingStyles) {
           md = detectAndPromoteHeadings(md, numberingLevels);
         }
         md = cleanMarkdown(md);
-        const yaml = buildYamlHeader(ch, book);
-        ch.markdownContent = yaml + md;
-        ch.status = "done";
+
+        setChapters(prev => prev.map(c => {
+          if (c.id !== ch.id) return c;
+          const title = (detectedTitle && !c.title) ? detectedTitle : c.title;
+          const slug = (detectedTitle && !c.title) ? slugify(detectedTitle) : c.slug;
+          const yaml = buildYamlHeader({ ...c, title, slug }, bookRef.current);
+          return {
+            ...c,
+            title,
+            slug,
+            markdownContent: yaml + md,
+            status: "done",
+          };
+        }));
       } catch (err) {
         console.error(`Error converting ${ch.fileName}:`, err);
-        ch.status = "error";
+        setChapters(prev => prev.map(c => c.id === ch.id ? { ...c, status: "error" } : c));
       }
-      updated[i] = ch;
-      setChapters([...updated]);
     }
+
+    convertingRef.current = false;
     setConverting(false);
-    setStep("output");
-  }, [chapters, book]);
+  }, []);
+
+  // Auto-trigger conversion 800ms after pending files appear
+  useEffect(() => {
+    const hasPending = chapters.some(c => c.status === "pending" && c.fileType === "docx");
+    const hasPdfPending = chapters.some(c => c.status === "pending" && c.fileType === "pdf");
+
+    if (hasPdfPending) {
+      setChapters(prev => prev.map(ch =>
+        ch.fileType === "pdf" && ch.status === "pending"
+          ? { ...ch, status: "pdf-notice" }
+          : ch
+      ));
+    }
+
+    if (!hasPending || convertingRef.current) return;
+
+    if (conversionTimeoutRef.current) clearTimeout(conversionTimeoutRef.current);
+    conversionTimeoutRef.current = setTimeout(runConversion, 800);
+
+    return () => {
+      if (conversionTimeoutRef.current) clearTimeout(conversionTimeoutRef.current);
+    };
+  }, [chapters, runConversion]);
+
+  // ─── Page-level file drop handler ───
+  const handlePageDragOver = useCallback(e => {
+    if (e.dataTransfer.types.includes("Files")) {
+      e.preventDefault();
+    }
+  }, []);
+
+  const handlePageDrop = useCallback(e => {
+    if (!e.dataTransfer.types.includes("Files")) return;
+    e.preventDefault();
+    const files = Array.from(e.dataTransfer.files).filter(
+      f => f.name.endsWith(".docx") || f.name.endsWith(".pdf")
+    );
+    if (files.length) addFiles(files);
+  }, [addFiles]);
+
+  // ─── Derived state ───
+  const doneChapters = chapters.filter(c => c.status === "done");
+  const pdfNotice = chapters.filter(c => c.status === "pdf-notice");
+  const errors = chapters.filter(c => c.status === "error");
+  const indexContent = doneChapters.length ? buildIndexFile(doneChapters, book) : null;
 
   return (
     <div
+      onDragOver={handlePageDragOver}
+      onDrop={handlePageDrop}
       style={{
         "--bg": "#faf9f7",
         "--card": "#ffffff",
@@ -1199,75 +1287,122 @@ export default function RAGConverter() {
       </div>
 
       <BookMeta book={book} onChange={setBook} />
-      <StepIndicator current={step} onNav={setStep} />
 
-      {/* Step: Upload */}
-      {step === "upload" && (
-        <div className="fade-in">
-          <UploadZone onFiles={addFiles} />
-          {chapters.length > 0 && (
-            <>
-              <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 10 }}>
-                {chapters.length} file{chapters.length !== 1 ? "s" : ""} queued
-              </div>
-              {chapters.map((ch, i) => (
-                <div key={ch.id} className="fade-slide-in" style={{ ...fileRowStyle, marginBottom: 6, animationDelay: `${i * 40}ms` }}>
-                  <span style={{ fontSize: 16 }}>{ch.fileType === "docx" ? "\uD83D\uDCD8" : "\uD83D\uDCD5"}</span>
-                  <span style={{ flex: 1, fontSize: 13, fontFamily: "var(--font-mono)", color: "var(--text)" }}>{ch.fileName}</span>
-                  <span style={{ fontSize: 11, color: "var(--muted)", fontFamily: "var(--font-mono)" }}>Ch. {ch.chapterNum}</span>
-                  <button style={{ ...linkBtnStyle, color: "#ef4444" }} onClick={() => removeChapter(ch.id)}>&times;</button>
-                </div>
-              ))}
-              <button style={{ ...primaryBtnStyle, marginTop: 16 }} onClick={() => setStep("configure")}>
-                Configure Chapters &rarr;
-              </button>
-            </>
-          )}
+      <UploadZone onFiles={addFiles} compact={chapters.length > 0} />
+
+      {/* Download bar — visible when any conversions exist */}
+      {(doneChapters.length > 0 || converting) && (
+        <DownloadBar chapters={chapters} book={book} converting={converting} />
+      )}
+
+      {/* Converting indicator */}
+      {converting && (
+        <div style={{
+          padding: 16,
+          background: "var(--accent-bg)",
+          borderRadius: 8,
+          marginBottom: 16,
+          fontSize: 13,
+          fontFamily: "var(--font-body)",
+          color: "var(--accent)",
+          backgroundImage: "linear-gradient(90deg, var(--accent-bg) 0%, var(--accent-dim) 50%, var(--accent-bg) 100%)",
+          backgroundSize: "200% 100%",
+          animation: "shimmer 1.5s infinite",
+        }}>
+          Converting files via mammoth.js&hellip; DOCX files convert in-browser. PDF files require CLI tools.
         </div>
       )}
 
-      {/* Step: Configure */}
-      {step === "configure" && (
+      {/* File list */}
+      {chapters.length > 0 && (
         <div className="fade-in">
-          {chapters.length === 0 ? (
-            <p style={{ color: "var(--muted)", fontSize: 14 }}>No files uploaded. Go back to Step 1.</p>
-          ) : (
-            <>
-              <p style={{ fontSize: 13, color: "var(--muted)", marginBottom: 14 }}>
-                Drag chapters to reorder. Click to expand and edit title, slug, topics, and key terms.
-              </p>
-              {chapters.map((ch, i) => (
-                <ChapterRow
-                  key={ch.id}
-                  ch={ch}
-                  index={i}
-                  total={chapters.length}
-                  onUpdate={updateChapter}
-                  onRemove={removeChapter}
-                  onMove={moveChapter}
-                  onDragStart={handleDragStart}
-                  onDragOver={handleDragOver}
-                  onDragEnd={handleDragEnd}
-                  onDrop={handleDrop}
-                  dragOverPos={dragState.overIndex === i ? dragState.overPos : null}
-                />
-              ))}
-              <button style={{ ...primaryBtnStyle, marginTop: 16 }} onClick={() => { setStep("output"); }}>
-                Convert &amp; Download &rarr;
-              </button>
-            </>
+          <p style={{ fontSize: 13, color: "var(--muted)", marginBottom: 14 }}>
+            Drag to reorder. Click to expand and edit metadata.
+          </p>
+
+          {/* Index file row (when converted chapters exist) */}
+          {indexContent && (
+            <div style={{ ...fileRowStyle, marginBottom: 10 }} className="fade-slide-in">
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: 13, flex: 1, color: "var(--text)" }}>00-index.md</span>
+              <span style={{ fontSize: 12, color: "var(--muted)", fontFamily: "var(--font-body)" }}>Index</span>
+              <button style={linkBtnStyle} onClick={() => setPreview({ name: "00-index.md", content: indexContent })}>Preview</button>
+              <button style={linkBtnStyle} onClick={() => downloadFile("00-index.md", indexContent)}>&#11015;</button>
+            </div>
           )}
+
+          {chapters.map((ch, i) => (
+            <ChapterRow
+              key={ch.id}
+              ch={ch}
+              index={i}
+              total={chapters.length}
+              onUpdate={updateChapter}
+              onRemove={removeChapter}
+              onMove={moveChapter}
+              onDragStart={handleDragStart}
+              onDragOver={handleDragOver}
+              onDragEnd={handleDragEnd}
+              onDrop={handleDrop}
+              dragOverPos={dragState.overIndex === i ? dragState.overPos : null}
+              onPreview={ch => {
+                const fn = `${String(ch.chapterNum).padStart(2, "0")}-${ch.slug}.md`;
+                setPreview({ name: fn, content: refreshYaml(ch, book) });
+              }}
+              onDownload={ch => {
+                const fn = `${String(ch.chapterNum).padStart(2, "0")}-${ch.slug}.md`;
+                downloadFile(fn, refreshYaml(ch, book));
+              }}
+            />
+          ))}
         </div>
       )}
 
-      {/* Step: Output */}
-      {step === "output" && (
-        <OutputView
-          chapters={chapters}
-          book={book}
-          converting={converting}
-          onConvert={runConversion}
-        />
+      {/* Notices */}
+      {pdfNotice.length > 0 && (
+        <div style={{ padding: 16, background: "#fef3c7", borderRadius: 8, marginBottom: 16, fontSize: 13, fontFamily: "var(--font-body)", color: "#92400e" }}>
+          <strong>{pdfNotice.length} PDF file{pdfNotice.length > 1 ? "s" : ""} skipped.</strong> Browser-based PDF conversion lacks the structural detection that Marker provides. Use the CLI toolkit (<code>convert.py</code>) for PDF files.
+        </div>
+      )}
+
+      {errors.length > 0 && (
+        <div style={{ padding: 16, background: "#fef2f2", borderRadius: 8, marginBottom: 16, fontSize: 13, fontFamily: "var(--font-body)", color: "#991b1b" }}>
+          <strong>{errors.length} file{errors.length > 1 ? "s" : ""} failed.</strong> Check the console for details.
+        </div>
+      )}
+
+      {/* Preview modal */}
+      {preview && (
+        <div
+          style={{
+            position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 1000,
+            display: "flex", justifyContent: "center", alignItems: "center", padding: 24,
+            animation: "fadeIn 0.15s ease",
+          }}
+          onClick={() => setPreview(null)}
+        >
+          <div
+            style={{
+              background: "var(--bg)", borderRadius: 12, width: "100%", maxWidth: 720,
+              maxHeight: "80vh", display: "flex", flexDirection: "column",
+              border: "1px solid var(--border)",
+              boxShadow: "0 24px 64px rgba(0,0,0,0.2)",
+              animation: "fadeSlideIn 0.2s ease",
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 20px", borderBottom: "1px solid var(--border)" }}>
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: 14, fontWeight: 700, color: "var(--text)" }}>{preview.name}</span>
+              <button style={{ ...linkBtnStyle, fontSize: 18 }} onClick={() => setPreview(null)}>&times;</button>
+            </div>
+            <pre style={{
+              flex: 1, overflow: "auto", padding: 20, margin: 0,
+              fontFamily: "var(--font-mono)", fontSize: 12, lineHeight: 1.6,
+              color: "var(--text)", whiteSpace: "pre-wrap", wordBreak: "break-word",
+            }}>
+              {preview.content}
+            </pre>
+          </div>
+        </div>
       )}
 
       {/* Footer */}
