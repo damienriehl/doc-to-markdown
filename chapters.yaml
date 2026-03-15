@@ -1,0 +1,102 @@
+# Chapter Mapping Configuration
+# ================================
+# Map each source file to its chapter metadata.
+# The converter uses this to name output files and generate YAML front matter.
+#
+# Fields:
+#   source:     Filename in the ./source/ directory (DOCX or PDF)
+#   chapter:    Chapter number (used for sort order and filename prefix)
+#   slug:       URL-safe name for the output file (lowercase, hyphens)
+#   title:      Full chapter title (appears in YAML front matter)
+#   topics:     Key topics covered (used in YAML front matter for RAG context)
+#   key_terms:  Important terms the RAG system should recognize
+#
+# If a source file is not listed here, the converter will:
+#   - Extract the title from the document's first heading
+#   - Auto-generate a slug from that title
+#   - Assign the next available chapter number
+
+book_title: "Trialbook"
+book_author: "Damien Riehl"
+
+chapters:
+  - source: "Chapter1.docx"
+    chapter: 1
+    slug: "trial-preparation"
+    title: "Trial Preparation"
+    topics:
+      - case theory development
+      - trial notebook organization
+      - pretrial motions
+      - jury selection preparation
+      - witness preparation
+    key_terms:
+      - case theory
+      - trial notebook
+      - voir dire
+      - pretrial conference
+      - witness preparation
+
+  - source: "Chapter2.docx"
+    chapter: 2
+    slug: "motion-practice"
+    title: "Motion Practice"
+    topics:
+      - motion drafting
+      - motion in limine
+      - summary judgment
+      - motion to dismiss
+      - oral argument
+    key_terms:
+      - motion in limine
+      - summary judgment
+      - motion to dismiss
+      - memorandum of law
+      - oral argument
+
+  - source: "Chapter3.docx"
+    chapter: 3
+    slug: "witness-examination"
+    title: "Witness Examination"
+    topics:
+      - direct examination
+      - cross-examination
+      - impeachment
+      - expert witnesses
+      - redirect examination
+    key_terms:
+      - direct examination
+      - cross-examination
+      - impeachment
+      - leading questions
+      - expert qualification
+
+  - source: "Chapter4.docx"
+    chapter: 4
+    slug: "objections-and-exhibits"
+    title: "Objections and Exhibits"
+    topics:
+      - evidentiary objections
+      - foundation requirements
+      - exhibit admission
+      - hearsay exceptions
+      - authentication
+    key_terms:
+      - objection
+      - foundation
+      - exhibit
+      - hearsay
+      - authentication
+      - best evidence rule
+
+# Add more chapters as needed:
+#  - source: "Chapter5.docx"
+#    chapter: 5
+#    slug: "closing-arguments"
+#    title: "Closing Arguments"
+#    topics:
+#      - argument structure
+#      - jury instructions
+#    key_terms:
+#      - closing argument
+#      - jury charge
