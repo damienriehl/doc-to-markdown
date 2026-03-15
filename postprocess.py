@@ -33,14 +33,14 @@ def _is_valid_roman(s: str) -> bool:
 
 
 _OUTLINE_PATTERNS = [
-    ("DECIMAL_MULTI",  re.compile(r"^(\d+(?:\.\d+)+)\s{2,}(.+)$"), None),
-    ("DECIMAL_SINGLE", re.compile(r"^(\d+\.)\s{2,}(.+)$"), None),
-    ("ROMAN_UPPER",    re.compile(r"^([IVXLC]+\.)\s{2,}(.+)$"),
+    ("DECIMAL_MULTI",  re.compile(r"^(\d+(?:\.\d+)+)(?:\t| {2,})(.+)$"), None),
+    ("DECIMAL_SINGLE", re.compile(r"^(\d+\.)(?:\t| {2,})(.+)$"), None),
+    ("ROMAN_UPPER",    re.compile(r"^([IVXLC]+\.)(?:\t| {2,})(.+)$"),
      lambda m: _is_valid_roman(m.group(1)[:-1])),
-    ("UPPER_ALPHA",    re.compile(r"^([A-Z]\.)\s{2,}(.+)$"), None),
-    ("NUMERIC_PAREN",  re.compile(r"^(\d+\))\s{2,}(.+)$"), None),
-    ("LOWER_ALPHA",    re.compile(r"^([a-z][.)])\s{2,}(.+)$"), None),
-    ("ROMAN_LOWER",    re.compile(r"^([ivxlc]+\.)\s{2,}(.+)$"),
+    ("UPPER_ALPHA",    re.compile(r"^([A-Z]\.)(?:\t| {2,})(.+)$"), None),
+    ("NUMERIC_PAREN",  re.compile(r"^(\d+\))(?:\t| {2,})(.+)$"), None),
+    ("LOWER_ALPHA",    re.compile(r"^([a-z][.)])(?:\t| {2,})(.+)$"), None),
+    ("ROMAN_LOWER",    re.compile(r"^([ivxlc]+\.)(?:\t| {2,})(.+)$"),
      lambda m: _is_valid_roman(m.group(1)[:-1])),
 ]
 

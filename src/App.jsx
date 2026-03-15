@@ -212,19 +212,21 @@ function cleanMarkdown(text) {
   // Strip empty markdown link clusters (belt-and-suspenders for Word bookmark artifacts)
   t = t.replace(/(\[\]\(#?[^)]*\))+/g, "");
   t = t.replace(/([^\n])\n(#{1,6}\s)/g, "$1\n\n$2");
+  // Replace tabs with spaces in heading lines
+  t = t.replace(/^(#{1,6}\s.*)$/gm, line => line.replace(/\t/g, " "));
   return t.trim() + "\n";
 }
 
 // ─── Adaptive Outline Heading Detection ──────────────────────────────────────
 
 const OUTLINE_TYPES = [
-  { type: "DECIMAL_MULTI",  regex: /^(\d+(?:\.\d+)+)\s{2,}(.+)$/ },
-  { type: "DECIMAL_SINGLE", regex: /^(\d+\.)\s{2,}(.+)$/ },
-  { type: "ROMAN_UPPER",    regex: /^([IVXLC]+\.)\s{2,}(.+)$/, validate: m => parseRoman(m[1].slice(0, -1)) !== null },
-  { type: "UPPER_ALPHA",    regex: /^([A-Z]\.)\s{2,}(.+)$/ },
-  { type: "NUMERIC_PAREN",  regex: /^(\d+\))\s{2,}(.+)$/ },
-  { type: "LOWER_ALPHA",    regex: /^([a-z][.)])\s{2,}(.+)$/ },
-  { type: "ROMAN_LOWER",    regex: /^([ivxlc]+\.)\s{2,}(.+)$/, validate: m => parseRoman(m[1].slice(0, -1)) !== null },
+  { type: "DECIMAL_MULTI",  regex: /^(\d+(?:\.\d+)+)(?:\t| {2,})(.+)$/ },
+  { type: "DECIMAL_SINGLE", regex: /^(\d+\.)(?:\t| {2,})(.+)$/ },
+  { type: "ROMAN_UPPER",    regex: /^([IVXLC]+\.)(?:\t| {2,})(.+)$/, validate: m => parseRoman(m[1].slice(0, -1)) !== null },
+  { type: "UPPER_ALPHA",    regex: /^([A-Z]\.)(?:\t| {2,})(.+)$/ },
+  { type: "NUMERIC_PAREN",  regex: /^(\d+\))(?:\t| {2,})(.+)$/ },
+  { type: "LOWER_ALPHA",    regex: /^([a-z][.)])(?:\t| {2,})(.+)$/ },
+  { type: "ROMAN_LOWER",    regex: /^([ivxlc]+\.)(?:\t| {2,})(.+)$/, validate: m => parseRoman(m[1].slice(0, -1)) !== null },
 ];
 
 const DEFAULT_HIERARCHY = [
@@ -432,23 +434,50 @@ async function convertDocx(file) {
   // Collect Word numbering levels per paragraph index
   const numberingLevels = new Map();
   let paraIdx = 0;
+  let hasHeadingStyles = false;
 
   const result = await mammoth.convertToHtml(
     { arrayBuffer },
     {
       transformDocument: mammoth.transforms.paragraph(function(paragraph) {
+        const styleName = paragraph.styleName || "";
+        const styleId = paragraph.styleId || "";
+
+        // Auto-detect heading styles: "Head 1", "Head 2", "Head1Ch1", etc.
+        let headingLevel = null;
+        const headMatch = styleName.match(/\bhead(?:ing)?\s*(\d)/i)
+          || styleId.match(/\bhead(?:ing)?(\d)/i);
+        if (headMatch) {
+          headingLevel = parseInt(headMatch[1], 10);
+        } else if (/ch\s*title|chtitle/i.test(styleName + styleId)) {
+          headingLevel = 0; // chapter title → H1
+        }
+
+        if (headingLevel !== null) {
+          hasHeadingStyles = true;
+          // Head1 → H2, Head2 → H3, Head3 → H4; ChTitle → H1
+          const actualLevel = headingLevel === 0 ? 1 : Math.min(headingLevel + 1, 6);
+          paraIdx++;
+          return {
+            ...paragraph,
+            styleId: `Heading${actualLevel}`,
+            styleName: `Heading ${actualLevel}`,
+            numbering: null, // strip numbering to prevent list rendering
+          };
+        }
+
         if (paragraph.numbering) {
           numberingLevels.set(paraIdx, parseInt(paragraph.numbering.level, 10));
         }
         paraIdx++;
-        return paragraph; // Don't modify — preserve original formatting
+        return paragraph;
       })
     }
   );
 
   let md = htmlToMarkdown(result.value);
   md = cleanMarkdown(md);
-  return { md, numberingLevels };
+  return { md, numberingLevels, hasHeadingStyles };
 }
 
 // ─── Components ──────────────────────────────────────────────────────────────
@@ -1111,7 +1140,7 @@ export default function RAGConverter() {
       updated[i] = ch;
       setChapters([...updated]);
       try {
-        const { md: rawMd, numberingLevels } = await convertDocx(ch.file);
+        const { md: rawMd, numberingLevels, hasHeadingStyles } = await convertDocx(ch.file);
         let md = rawMd;
         const detectedTitle = extractFirstHeading(md);
         if (detectedTitle && !ch.title) {
@@ -1119,7 +1148,10 @@ export default function RAGConverter() {
           ch.slug = slugify(detectedTitle);
         }
         md = normalizeHeadings(md);
-        md = detectAndPromoteHeadings(md, numberingLevels);
+        // Only use text-based detection if mammoth didn't find heading styles
+        if (!hasHeadingStyles) {
+          md = detectAndPromoteHeadings(md, numberingLevels);
+        }
         md = cleanMarkdown(md);
         const yaml = buildYamlHeader(ch, book);
         ch.markdownContent = yaml + md;
