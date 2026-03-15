@@ -152,7 +152,7 @@ function htmlToMarkdown(html) {
       case "p": return `${children.trim()}\n\n`;
       case "br": return "\n";
       case "strong": case "b": return `**${children}**`;
-      case "em": case "i": return `*${children}*`;
+      case "em": case "i": case "u": return `*${children}*`;
       case "a": {
         const href = node.getAttribute("href") || "";
         // Skip empty bookmark anchors (Word artifacts like bookmarkStart → <a id="..."></a>)
