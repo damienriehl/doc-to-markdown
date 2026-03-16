@@ -1600,8 +1600,12 @@ export default function RAGConverter() {
       )}
 
       {errors.length > 0 && (
-        <div style={{ padding: 16, background: "#fef2f2", borderRadius: 8, marginBottom: 16, fontSize: 13, fontFamily: "var(--font-body)", color: "#991b1b" }}>
-          <strong>{errors.length} file{errors.length > 1 ? "s" : ""} failed.</strong> Check the console for details.
+        <div style={{ padding: 16, background: "#fef2f2", borderRadius: 8, marginBottom: 16, fontSize: 13, fontFamily: "var(--font-body)", color: "#991b1b", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <span><strong>{errors.length} file{errors.length > 1 ? "s" : ""} failed.</strong> Check the console for details.</span>
+          <button
+            onClick={() => setChapters(prev => prev.map(c => c.status === "error" ? { ...c, status: "pending" } : c))}
+            style={{ padding: "4px 10px", fontSize: 12, border: "1px solid #991b1b", borderRadius: 5, background: "transparent", color: "#991b1b", cursor: "pointer", fontFamily: "var(--font-body)", flexShrink: 0 }}
+          >Retry all</button>
         </div>
       )}
 
