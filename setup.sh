@@ -35,12 +35,16 @@ pip install \
     pymupdf4llm \
     marker-pdf \
     python-docx \
-    regex
+    regex \
+    fastapi \
+    uvicorn \
+    python-multipart
 
 echo ""
 echo "=== Setup complete ==="
 echo ""
 echo "Next steps:"
-echo "  1. Place your DOCX/PDF files in ./source/"
+echo "  1. Place your DOCX/PDF/RTF/ODT/TXT files in ./source/"
 echo "  2. Edit chapters.yaml to map your files"
 echo "  3. Run: python convert.py --input-dir ./source --output-dir ./output"
+echo "  4. Optional: python server.py  (starts local API for web app PDF conversion)"

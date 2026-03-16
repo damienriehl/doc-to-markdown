@@ -3,6 +3,7 @@ import * as mammoth from "mammoth";
 import { resolveInputs, resolveDataTransferItems } from "./inputResolver.js";
 import { convertRtf } from "./convertRtf.js";
 import { convertOdt } from "./convertOdt.js";
+import { isServerAvailable, convertViaServer } from "./serverApi.js";
 
 // ─── Chapter Number Inference ────────────────────────────────────────────────
 
@@ -976,7 +977,7 @@ function ChapterRow({ ch, index, total, onUpdate, onRemove, onMove, onPreview, o
 
 function DownloadBar({ chapters, book, converting }) {
   const done = chapters.filter(c => c.status === "done" || c.status === "done-basic");
-  const total = chapters.filter(c => ["docx", "rtf", "odt", "txt"].includes(c.fileType)).length;
+  const total = chapters.filter(c => ["docx", "rtf", "odt", "txt", "pdf"].includes(c.fileType)).length;
 
   const downloadAllIndividual = () => {
     const sorted = [...done].sort((a, b) => a.chapterNum - b.chapterNum);
@@ -1270,30 +1271,69 @@ export default function RAGConverter() {
     convertingRef.current = true;
     setConverting(true);
 
-    // Mark PDFs as pdf-notice (no browser-side converter for PDF)
-    setChapters(prev => prev.map(ch => {
-      if (ch.status !== "pending") return ch;
-      if (ch.fileType === "pdf") return { ...ch, status: "pdf-notice" };
-      return ch;
-    }));
+    // Check if local API server is available
+    const serverUp = await isServerAvailable();
 
-    // Get pending files to convert (DOCX, TXT, RTF, ODT)
-    const toConvert = chaptersRef.current.filter(c => c.status === "pending" && ["docx", "txt", "rtf", "odt"].includes(c.fileType));
+    // Mark PDFs as pdf-notice only if server is NOT available
+    if (!serverUp) {
+      setChapters(prev => prev.map(ch => {
+        if (ch.status !== "pending") return ch;
+        if (ch.fileType === "pdf") return { ...ch, status: "pdf-notice" };
+        return ch;
+      }));
+    }
+
+    // Get pending files to convert
+    const allConvertable = ["docx", "txt", "rtf", "odt"];
+    if (serverUp) allConvertable.push("pdf");
+    const toConvert = chaptersRef.current.filter(c => c.status === "pending" && allConvertable.includes(c.fileType));
 
     for (const ch of toConvert) {
       setChapters(prev => prev.map(c => c.id === ch.id ? { ...c, status: "converting" } : c));
 
       try {
-        const converters = { docx: convertDocx, txt: convertTxt, rtf: convertRtf, odt: convertOdt };
-        const converter = converters[ch.fileType] || convertDocx;
-        const { md: rawMd, numberingLevels, hasHeadingStyles, isBasicQuality } = await converter(ch.file);
-        let md = rawMd;
-        const detectedTitle = extractFirstHeading(md);
+        // Prefer server for PDF, RTF, ODT (higher quality). Use browser for DOCX, TXT.
+        const useServer = serverUp && ["pdf", "rtf", "odt"].includes(ch.fileType);
+        let md, isBasicQuality = false;
 
-        md = normalizeHeadings(md);
-        if (!hasHeadingStyles) {
-          md = detectAndPromoteHeadings(md, numberingLevels);
+        if (useServer) {
+          const result = await convertViaServer(ch.file);
+          md = result.markdown;
+        } else {
+          const converters = { docx: convertDocx, txt: convertTxt, rtf: convertRtf, odt: convertOdt };
+          const converter = converters[ch.fileType] || convertDocx;
+          const result = await converter(ch.file);
+          md = result.md;
+          isBasicQuality = result.isBasicQuality || false;
+
+          // Apply post-processing for browser-side conversions
+          const detectedTitle = extractFirstHeading(md);
+          md = normalizeHeadings(md);
+          if (!result.hasHeadingStyles) {
+            md = detectAndPromoteHeadings(md, result.numberingLevels);
+          }
+          md = cleanMarkdown(md);
+
+          // Build and prepend YAML header
+          setChapters(prev => prev.map(c => {
+            if (c.id !== ch.id) return c;
+            const title = (detectedTitle && !c.title) ? detectedTitle : c.title;
+            const slug = (detectedTitle && !c.title) ? slugify(detectedTitle) : c.slug;
+            const yaml = buildYamlHeader({ ...c, title, slug }, bookRef.current);
+            return {
+              ...c,
+              title,
+              slug,
+              markdownContent: yaml + md,
+              status: isBasicQuality ? "done-basic" : "done",
+            };
+          }));
+          continue;
         }
+
+        // Server-converted: post-process and set status
+        const detectedTitle = extractFirstHeading(md);
+        md = normalizeHeadings(md);
         md = cleanMarkdown(md);
 
         setChapters(prev => prev.map(c => {
@@ -1306,7 +1346,7 @@ export default function RAGConverter() {
             title,
             slug,
             markdownContent: yaml + md,
-            status: isBasicQuality ? "done-basic" : "done",
+            status: "done",
           };
         }));
       } catch (err) {
@@ -1321,17 +1361,8 @@ export default function RAGConverter() {
 
   // Auto-trigger conversion 800ms after pending files appear
   useEffect(() => {
-    const convertableTypes = ["docx", "txt", "rtf", "odt"];
-    const hasPending = chapters.some(c => c.status === "pending" && convertableTypes.includes(c.fileType));
-    const hasPdfPending = chapters.some(c => c.status === "pending" && c.fileType === "pdf");
-
-    if (hasPdfPending) {
-      setChapters(prev => prev.map(ch =>
-        ch.fileType === "pdf" && ch.status === "pending"
-          ? { ...ch, status: "pdf-notice" }
-          : ch
-      ));
-    }
+    // All types are potentially convertible now (PDF via server)
+    const hasPending = chapters.some(c => c.status === "pending" && ["docx", "txt", "rtf", "odt", "pdf"].includes(c.fileType));
 
     if (!hasPending || convertingRef.current) return;
 
@@ -1507,7 +1538,7 @@ export default function RAGConverter() {
           backgroundSize: "200% 100%",
           animation: "shimmer 1.5s infinite",
         }}>
-          Converting files via mammoth.js&hellip; DOCX files convert in-browser. PDF files require CLI tools.
+          Converting files&hellip; DOCX and TXT convert in-browser. PDF, RTF, and ODT use the local API server when available.
         </div>
       )}
 
