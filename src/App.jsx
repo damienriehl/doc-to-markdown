@@ -1,6 +1,8 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import * as mammoth from "mammoth";
 import { resolveInputs, resolveDataTransferItems } from "./inputResolver.js";
+import { convertRtf } from "./convertRtf.js";
+import { convertOdt } from "./convertOdt.js";
 
 // ─── Chapter Number Inference ────────────────────────────────────────────────
 
@@ -442,7 +444,7 @@ function refreshYaml(chapter, book) {
 
 function generateCombinedMarkdown(chapters, book) {
   const done = [...chapters]
-    .filter(c => c.status === "done")
+    .filter(c => c.status === "done" || c.status === "done-basic")
     .sort((a, b) => a.chapterNum - b.chapterNum);
   const parts = [
     `# ${book.title || "Untitled Book"}`,
@@ -464,7 +466,7 @@ async function generateZip(chapters, book) {
   const JSZip = (await import("jszip")).default;
   const zip = new JSZip();
   const done = [...chapters]
-    .filter(c => c.status === "done")
+    .filter(c => c.status === "done" || c.status === "done-basic")
     .sort((a, b) => a.chapterNum - b.chapterNum);
   for (const ch of done) {
     const fn = `${String(ch.chapterNum).padStart(2, "0")}-${ch.slug}.md`;
@@ -868,9 +870,10 @@ function ChapterRow({ ch, index, total, onUpdate, onRemove, onMove, onPreview, o
               background: statusColors[ch.status] || "var(--muted)",
               flexShrink: 0,
             }}
+            title={ch.status === "done-basic" ? "Converted with basic formatting (use local API server for better quality)" : ""}
           />
         )}
-        {ch.status === "done" && (
+        {(ch.status === "done" || ch.status === "done-basic") && (
           <>
             <button style={linkBtnStyle} onClick={e => { e.stopPropagation(); onPreview(ch); }} title="Preview">Preview</button>
             <button style={linkBtnStyle} onClick={e => { e.stopPropagation(); onDownload(ch); }} title="Download">&#11015;</button>
@@ -972,7 +975,7 @@ function ChapterRow({ ch, index, total, onUpdate, onRemove, onMove, onPreview, o
 }
 
 function DownloadBar({ chapters, book, converting }) {
-  const done = chapters.filter(c => c.status === "done");
+  const done = chapters.filter(c => c.status === "done" || c.status === "done-basic");
   const total = chapters.filter(c => ["docx", "rtf", "odt", "txt"].includes(c.fileType)).length;
 
   const downloadAllIndividual = () => {
@@ -1267,23 +1270,23 @@ export default function RAGConverter() {
     convertingRef.current = true;
     setConverting(true);
 
-    // Mark PDFs as pdf-notice, RTF/ODT as needs-server (until Phase 4 adds JS converters)
+    // Mark PDFs as pdf-notice (no browser-side converter for PDF)
     setChapters(prev => prev.map(ch => {
       if (ch.status !== "pending") return ch;
       if (ch.fileType === "pdf") return { ...ch, status: "pdf-notice" };
-      if (ch.fileType === "rtf" || ch.fileType === "odt") return { ...ch, status: "needs-server" };
       return ch;
     }));
 
-    // Get pending DOCX and TXT files to convert
-    const toConvert = chaptersRef.current.filter(c => c.status === "pending" && ["docx", "txt"].includes(c.fileType));
+    // Get pending files to convert (DOCX, TXT, RTF, ODT)
+    const toConvert = chaptersRef.current.filter(c => c.status === "pending" && ["docx", "txt", "rtf", "odt"].includes(c.fileType));
 
     for (const ch of toConvert) {
       setChapters(prev => prev.map(c => c.id === ch.id ? { ...c, status: "converting" } : c));
 
       try {
-        const converter = ch.fileType === "txt" ? convertTxt : convertDocx;
-        const { md: rawMd, numberingLevels, hasHeadingStyles } = await converter(ch.file);
+        const converters = { docx: convertDocx, txt: convertTxt, rtf: convertRtf, odt: convertOdt };
+        const converter = converters[ch.fileType] || convertDocx;
+        const { md: rawMd, numberingLevels, hasHeadingStyles, isBasicQuality } = await converter(ch.file);
         let md = rawMd;
         const detectedTitle = extractFirstHeading(md);
 
@@ -1303,7 +1306,7 @@ export default function RAGConverter() {
             title,
             slug,
             markdownContent: yaml + md,
-            status: "done",
+            status: isBasicQuality ? "done-basic" : "done",
           };
         }));
       } catch (err) {
@@ -1318,18 +1321,16 @@ export default function RAGConverter() {
 
   // Auto-trigger conversion 800ms after pending files appear
   useEffect(() => {
-    const convertableTypes = ["docx", "txt"];
-    const serverOnlyTypes = ["pdf", "rtf", "odt"];
+    const convertableTypes = ["docx", "txt", "rtf", "odt"];
     const hasPending = chapters.some(c => c.status === "pending" && convertableTypes.includes(c.fileType));
-    const hasServerPending = chapters.some(c => c.status === "pending" && serverOnlyTypes.includes(c.fileType));
+    const hasPdfPending = chapters.some(c => c.status === "pending" && c.fileType === "pdf");
 
-    if (hasServerPending) {
-      setChapters(prev => prev.map(ch => {
-        if (ch.status !== "pending") return ch;
-        if (ch.fileType === "pdf") return { ...ch, status: "pdf-notice" };
-        if (ch.fileType === "rtf" || ch.fileType === "odt") return { ...ch, status: "needs-server" };
-        return ch;
-      }));
+    if (hasPdfPending) {
+      setChapters(prev => prev.map(ch =>
+        ch.fileType === "pdf" && ch.status === "pending"
+          ? { ...ch, status: "pdf-notice" }
+          : ch
+      ));
     }
 
     if (!hasPending || convertingRef.current) return;
@@ -1375,9 +1376,9 @@ export default function RAGConverter() {
   }, [addFiles]);
 
   // ─── Derived state ───
-  const doneChapters = chapters.filter(c => c.status === "done");
+  const doneChapters = chapters.filter(c => c.status === "done" || c.status === "done-basic");
   const pdfNotice = chapters.filter(c => c.status === "pdf-notice");
-  const needsServer = chapters.filter(c => c.status === "needs-server");
+  const basicQuality = chapters.filter(c => c.status === "done-basic");
   const errors = chapters.filter(c => c.status === "error");
   const indexContent = doneChapters.length ? buildIndexFile(doneChapters, book) : null;
 
@@ -1561,9 +1562,9 @@ export default function RAGConverter() {
         </div>
       )}
 
-      {needsServer.length > 0 && (
+      {basicQuality.length > 0 && (
         <div style={{ padding: 16, background: "#fef3c7", borderRadius: 8, marginBottom: 16, fontSize: 13, fontFamily: "var(--font-body)", color: "#92400e" }}>
-          <strong>{needsServer.length} RTF/ODT file{needsServer.length > 1 ? "s" : ""} awaiting conversion.</strong> Start the local API server (<code>python server.py</code>) for best quality, or these will convert with basic formatting when browser-side support loads.
+          <strong>{basicQuality.length} file{basicQuality.length > 1 ? "s" : ""} converted with basic formatting.</strong> For higher quality RTF/ODT conversion, start the local API server (<code>python server.py</code>) which uses Pandoc.
         </div>
       )}
 
