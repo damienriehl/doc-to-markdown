@@ -31,7 +31,7 @@ function parseRoman(str) {
 }
 
 function inferChapterNum(filename) {
-  const base = filename.replace(/\.(docx|pdf)$/i, "");
+  const base = filename.replace(/\.(docx|pdf|rtf|odt|txt)$/i, "");
   const cleaned = base.replace(NOISE_RE, "").trim();
 
   // Strategy 1: Explicit chapter markers — CH1, Ch01, Chapter 3, Chap_04, ch-1
@@ -79,7 +79,7 @@ function inferChapterNum(filename) {
 }
 
 function inferCleanTitle(filename) {
-  const base = filename.replace(/\.(docx|pdf)$/i, "");
+  const base = filename.replace(/\.(docx|pdf|rtf|odt|txt)$/i, "");
   let cleaned = base.replace(NOISE_RE, "").trim();
   // Remove chapter prefixes
   cleaned = cleaned.replace(/^(?:ch(?:apter|ap)?)[.\s_-]*\d*[.\s_-]*/i, "");
@@ -538,6 +538,29 @@ async function convertDocx(file) {
   return { md, numberingLevels, hasHeadingStyles };
 }
 
+// ─── TXT Conversion ─────────────────────────────────────────────────────────
+
+async function convertTxt(file) {
+  let text;
+  try {
+    text = await file.text();
+  } catch {
+    // Fallback: try reading as Windows-1252 if UTF-8 fails
+    const buf = await file.arrayBuffer();
+    const decoder = new TextDecoder("windows-1252");
+    text = decoder.decode(buf);
+  }
+  // Preserve paragraphs as markdown paragraphs
+  const md = text
+    .replace(/\r\n/g, "\n")
+    .replace(/\r/g, "\n")
+    .split(/\n{2,}/)
+    .map(p => p.trim())
+    .filter(Boolean)
+    .join("\n\n");
+  return { md, numberingLevels: new Map(), hasHeadingStyles: false };
+}
+
 // ─── Components ──────────────────────────────────────────────────────────────
 
 function BookMeta({ book, onChange }) {
@@ -574,7 +597,7 @@ function UploadZone({ onFiles, compact }) {
       if (!e.dataTransfer.types.includes("Files")) return;
       setDragOver(false);
       const files = Array.from(e.dataTransfer.files).filter(
-        f => f.name.endsWith(".docx") || f.name.endsWith(".pdf")
+        f => /\.(docx|pdf|rtf|odt|txt|zip)$/i.test(f.name)
       );
       if (files.length) onFiles(files);
     },
@@ -612,7 +635,7 @@ function UploadZone({ onFiles, compact }) {
           ref={inputRef}
           type="file"
           multiple
-          accept=".docx,.pdf"
+          accept=".docx,.pdf,.rtf,.odt,.txt,.zip"
           style={{ display: "none" }}
           onChange={handleFileInput}
         />
@@ -660,13 +683,13 @@ function UploadZone({ onFiles, compact }) {
         ref={inputRef}
         type="file"
         multiple
-        accept=".docx,.pdf"
+        accept=".docx,.pdf,.rtf,.odt,.txt,.zip"
         style={{ display: "none" }}
         onChange={handleFileInput}
       />
       <div style={{ fontSize: 36, marginBottom: 8 }}>&#128196;</div>
       <div style={{ fontSize: 15, color: "var(--text)", fontWeight: 600, fontFamily: "var(--font-body)" }}>
-        Drop DOCX or PDF files here
+        Drop DOCX, PDF, RTF, ODT, TXT, or ZIP files here
       </div>
       <div style={{ fontSize: 13, color: "var(--muted)", marginTop: 4, fontFamily: "var(--font-body)" }}>
         or click to browse
@@ -679,13 +702,16 @@ function ChapterRow({ ch, index, total, onUpdate, onRemove, onMove, onPreview, o
   const [expanded, setExpanded] = useState(false);
   const [topicInput, setTopicInput] = useState("");
   const [termInput, setTermInput] = useState("");
-  const fileTypeIcon = ch.fileType === "docx" ? "\uD83D\uDCD8" : "\uD83D\uDCD5";
+  const fileTypeIcons = { docx: "\uD83D\uDCD7", pdf: "\uD83D\uDCD5", rtf: "\uD83D\uDCC4", odt: "\uD83D\uDCD8", txt: "\uD83D\uDCDD" };
+  const fileTypeIcon = fileTypeIcons[ch.fileType] || "\uD83D\uDCC4";
   const statusColors = {
     pending: "var(--muted)",
     converting: "var(--accent)",
     done: "#22c55e",
+    "done-basic": "#f59e0b",
     error: "#ef4444",
     "pdf-notice": "#f59e0b",
+    "needs-server": "#f59e0b",
   };
 
   const dragClassName = [
@@ -874,7 +900,7 @@ function ChapterRow({ ch, index, total, onUpdate, onRemove, onMove, onPreview, o
 
 function DownloadBar({ chapters, book, converting }) {
   const done = chapters.filter(c => c.status === "done");
-  const total = chapters.filter(c => c.fileType === "docx").length;
+  const total = chapters.filter(c => ["docx", "rtf", "odt", "txt"].includes(c.fileType)).length;
 
   const downloadAllIndividual = () => {
     const sorted = [...done].sort((a, b) => a.chapterNum - b.chapterNum);
@@ -1068,7 +1094,11 @@ export default function RAGConverter() {
           id: crypto.randomUUID(),
           file: item.file,
           fileName: item.file.name,
-          fileType: item.file.name.endsWith(".pdf") ? "pdf" : "docx",
+          fileType: /\.pdf$/i.test(item.file.name) ? "pdf"
+            : /\.rtf$/i.test(item.file.name) ? "rtf"
+            : /\.odt$/i.test(item.file.name) ? "odt"
+            : /\.txt$/i.test(item.file.name) ? "txt"
+            : "docx",
           title: item.title,
           slug: slugify(item.title),
           chapterNum: num,
@@ -1161,21 +1191,23 @@ export default function RAGConverter() {
     convertingRef.current = true;
     setConverting(true);
 
-    // Mark PDFs as pdf-notice
-    setChapters(prev => prev.map(ch =>
-      ch.fileType === "pdf" && ch.status === "pending"
-        ? { ...ch, status: "pdf-notice" }
-        : ch
-    ));
+    // Mark PDFs as pdf-notice, RTF/ODT as needs-server (until Phase 4 adds JS converters)
+    setChapters(prev => prev.map(ch => {
+      if (ch.status !== "pending") return ch;
+      if (ch.fileType === "pdf") return { ...ch, status: "pdf-notice" };
+      if (ch.fileType === "rtf" || ch.fileType === "odt") return { ...ch, status: "needs-server" };
+      return ch;
+    }));
 
-    // Get pending DOCX files to convert
-    const toConvert = chaptersRef.current.filter(c => c.status === "pending" && c.fileType === "docx");
+    // Get pending DOCX and TXT files to convert
+    const toConvert = chaptersRef.current.filter(c => c.status === "pending" && ["docx", "txt"].includes(c.fileType));
 
     for (const ch of toConvert) {
       setChapters(prev => prev.map(c => c.id === ch.id ? { ...c, status: "converting" } : c));
 
       try {
-        const { md: rawMd, numberingLevels, hasHeadingStyles } = await convertDocx(ch.file);
+        const converter = ch.fileType === "txt" ? convertTxt : convertDocx;
+        const { md: rawMd, numberingLevels, hasHeadingStyles } = await converter(ch.file);
         let md = rawMd;
         const detectedTitle = extractFirstHeading(md);
 
@@ -1210,15 +1242,18 @@ export default function RAGConverter() {
 
   // Auto-trigger conversion 800ms after pending files appear
   useEffect(() => {
-    const hasPending = chapters.some(c => c.status === "pending" && c.fileType === "docx");
-    const hasPdfPending = chapters.some(c => c.status === "pending" && c.fileType === "pdf");
+    const convertableTypes = ["docx", "txt"];
+    const serverOnlyTypes = ["pdf", "rtf", "odt"];
+    const hasPending = chapters.some(c => c.status === "pending" && convertableTypes.includes(c.fileType));
+    const hasServerPending = chapters.some(c => c.status === "pending" && serverOnlyTypes.includes(c.fileType));
 
-    if (hasPdfPending) {
-      setChapters(prev => prev.map(ch =>
-        ch.fileType === "pdf" && ch.status === "pending"
-          ? { ...ch, status: "pdf-notice" }
-          : ch
-      ));
+    if (hasServerPending) {
+      setChapters(prev => prev.map(ch => {
+        if (ch.status !== "pending") return ch;
+        if (ch.fileType === "pdf") return { ...ch, status: "pdf-notice" };
+        if (ch.fileType === "rtf" || ch.fileType === "odt") return { ...ch, status: "needs-server" };
+        return ch;
+      }));
     }
 
     if (!hasPending || convertingRef.current) return;
@@ -1242,7 +1277,7 @@ export default function RAGConverter() {
     if (!e.dataTransfer.types.includes("Files")) return;
     e.preventDefault();
     const files = Array.from(e.dataTransfer.files).filter(
-      f => f.name.endsWith(".docx") || f.name.endsWith(".pdf")
+      f => /\.(docx|pdf|rtf|odt|txt|zip)$/i.test(f.name)
     );
     if (files.length) addFiles(files);
   }, [addFiles]);
@@ -1250,6 +1285,7 @@ export default function RAGConverter() {
   // ─── Derived state ───
   const doneChapters = chapters.filter(c => c.status === "done");
   const pdfNotice = chapters.filter(c => c.status === "pdf-notice");
+  const needsServer = chapters.filter(c => c.status === "needs-server");
   const errors = chapters.filter(c => c.status === "error");
   const indexContent = doneChapters.length ? buildIndexFile(doneChapters, book) : null;
 
@@ -1282,7 +1318,7 @@ export default function RAGConverter() {
           RAG Converter
         </h1>
         <p style={{ fontSize: 13, color: "var(--muted)", margin: "4px 0 0", lineHeight: 1.5 }}>
-          Convert DOCX chapters to RAG-optimized Markdown &mdash; with YAML metadata, heading normalization, and a cross-reference index.
+          Convert DOCX, PDF, RTF, ODT, and TXT chapters to RAG-optimized Markdown &mdash; with YAML metadata, heading normalization, and a cross-reference index.
         </p>
       </div>
 
@@ -1360,7 +1396,13 @@ export default function RAGConverter() {
       {/* Notices */}
       {pdfNotice.length > 0 && (
         <div style={{ padding: 16, background: "#fef3c7", borderRadius: 8, marginBottom: 16, fontSize: 13, fontFamily: "var(--font-body)", color: "#92400e" }}>
-          <strong>{pdfNotice.length} PDF file{pdfNotice.length > 1 ? "s" : ""} skipped.</strong> Browser-based PDF conversion lacks the structural detection that Marker provides. Use the CLI toolkit (<code>convert.py</code>) for PDF files.
+          <strong>{pdfNotice.length} PDF file{pdfNotice.length > 1 ? "s" : ""} skipped.</strong> Start the local API server (<code>python server.py</code>) for browser-based PDF conversion, or use the CLI toolkit (<code>convert.py</code>).
+        </div>
+      )}
+
+      {needsServer.length > 0 && (
+        <div style={{ padding: 16, background: "#fef3c7", borderRadius: 8, marginBottom: 16, fontSize: 13, fontFamily: "var(--font-body)", color: "#92400e" }}>
+          <strong>{needsServer.length} RTF/ODT file{needsServer.length > 1 ? "s" : ""} awaiting conversion.</strong> Start the local API server (<code>python server.py</code>) for best quality, or these will convert with basic formatting when browser-side support loads.
         </div>
       )}
 
@@ -1407,7 +1449,7 @@ export default function RAGConverter() {
 
       {/* Footer */}
       <div style={{ marginTop: 40, paddingTop: 16, borderTop: "1px solid var(--border)", fontSize: 11, color: "var(--muted)", fontFamily: "var(--font-body)" }}>
-        DOCX converts in-browser via mammoth.js. PDF files require CLI tools &mdash; use the <code>convert.py</code> script with Marker or PyMuPDF4LLM. Press Enter after typing a topic or key term to add it.
+        DOCX and TXT convert in-browser. PDF, RTF, and ODT require the local API server (<code>python server.py</code>) or CLI tools. Press Enter after typing a topic or key term to add it.
       </div>
     </div>
   );

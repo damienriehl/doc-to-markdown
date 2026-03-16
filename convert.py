@@ -2,7 +2,7 @@
 """
 Legal Textbook RAG Converter
 =============================
-Batch-converts DOCX and PDF files to RAG-optimized Markdown.
+Batch-converts DOCX, PDF, RTF, ODT, and TXT files to RAG-optimized Markdown.
 
 Usage:
     python convert.py --input-dir ./source --output-dir ./output
@@ -32,28 +32,96 @@ def load_config(config_path: str) -> dict:
         return yaml.safe_load(f)
 
 
+FORMAT_PRIORITY = {".docx": 0, ".odt": 1, ".rtf": 2, ".pdf": 3, ".txt": 4}
+
+
 def find_source_files(input_dir: str) -> list[Path]:
-    """Find all DOCX and PDF files in the input directory."""
+    """Find all convertible files in the input directory."""
     input_path = Path(input_dir)
     if not input_path.exists():
         print(f"ERROR: Input directory '{input_dir}' does not exist.")
         sys.exit(1)
 
     files = []
-    for ext in ("*.docx", "*.pdf"):
+    for ext in ("*.docx", "*.pdf", "*.rtf", "*.odt", "*.txt"):
         files.extend(input_path.glob(ext))
 
-    # Deduplicate: if both DOCX and PDF exist for same base name, keep DOCX
+    # Also extract ZIP files
+    for zip_path in input_path.glob("*.zip"):
+        files.extend(_extract_zip(zip_path))
+
+    # Deduplicate: keep highest-priority format (DOCX > ODT > RTF > PDF > TXT)
     seen_bases = {}
     for f in files:
         base = f.stem.lower()
+        f_priority = FORMAT_PRIORITY.get(f.suffix.lower(), 99)
         if base not in seen_bases:
             seen_bases[base] = f
-        elif f.suffix.lower() == ".docx":
-            print(f"  INFO: Both DOCX and PDF found for '{f.stem}'. Using DOCX.")
-            seen_bases[base] = f
+        else:
+            existing_priority = FORMAT_PRIORITY.get(seen_bases[base].suffix.lower(), 99)
+            if f_priority < existing_priority:
+                print(f"  INFO: Multiple formats for '{f.stem}'. Using {f.suffix}.")
+                seen_bases[base] = f
 
     return sorted(seen_bases.values(), key=lambda p: p.name)
+
+
+def _extract_zip(zip_path: Path) -> list[Path]:
+    """Extract convertible files from a ZIP archive to a temp directory."""
+    import tempfile
+    import zipfile
+
+    convertible_exts = set(FORMAT_PRIORITY.keys())
+    skip_prefixes = ("__MACOSX/", ".", "__pycache__/")
+    skip_names = {".DS_Store", "Thumbs.db", "desktop.ini"}
+
+    try:
+        with zipfile.ZipFile(zip_path, "r") as zf:
+            # ZIP bomb protection
+            total_size = sum(info.file_size for info in zf.infolist())
+            if total_size > 500 * 1024 * 1024:  # 500MB
+                print(f"  WARNING: ZIP '{zip_path.name}' exceeds 500MB uncompressed. Skipping.")
+                return []
+            if len(zf.infolist()) > 1000:
+                print(f"  WARNING: ZIP '{zip_path.name}' has >1000 entries. Skipping.")
+                return []
+
+            extracted = []
+            temp_dir = Path(tempfile.mkdtemp(prefix="rag-zip-"))
+            for info in zf.infolist():
+                if info.is_dir():
+                    continue
+                name = Path(info.filename).name
+                # Skip OS artifacts and hidden files
+                if any(info.filename.startswith(p) for p in skip_prefixes):
+                    continue
+                if name in skip_names or name.startswith("."):
+                    continue
+                # Skip non-convertible files and nested ZIPs
+                ext = Path(name).suffix.lower()
+                if ext not in convertible_exts:
+                    continue
+                # Path traversal protection
+                if ".." in info.filename:
+                    continue
+
+                # Handle duplicate names by adding counter
+                target = temp_dir / name
+                counter = 2
+                while target.exists():
+                    stem = Path(name).stem
+                    target = temp_dir / f"{stem}-{counter}{ext}"
+                    counter += 1
+
+                with zf.open(info) as src, open(target, "wb") as dst:
+                    dst.write(src.read())
+                extracted.append(target)
+
+            print(f"  Extracted {len(extracted)} file(s) from {zip_path.name}")
+            return extracted
+    except (zipfile.BadZipFile, RuntimeError) as e:
+        print(f"  WARNING: Could not extract '{zip_path.name}': {e}")
+        return []
 
 
 def get_chapter_config(source_file: Path, config: dict, auto_counter: int) -> dict:
@@ -143,6 +211,73 @@ def convert_pdf_pymupdf(source: Path, output: Path) -> bool:
         return False
 
 
+def convert_rtf(source: Path, output: Path, media_dir: Path) -> bool:
+    """Convert RTF to Markdown via Pandoc."""
+    cmd = [
+        "pandoc",
+        str(source),
+        "-f", "rtf",
+        "-t", "gfm",
+        "--wrap=none",
+        f"--extract-media={media_dir}",
+        "-o", str(output),
+    ]
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+        if result.returncode != 0:
+            print(f"  ERROR (Pandoc RTF): {result.stderr.strip()}")
+            return False
+        return True
+    except FileNotFoundError:
+        print("  ERROR: Pandoc not installed. Run ./setup.sh first.")
+        return False
+    except subprocess.TimeoutExpired:
+        print("  ERROR: Pandoc timed out.")
+        return False
+
+
+def convert_odt(source: Path, output: Path, media_dir: Path) -> bool:
+    """Convert ODT to Markdown via Pandoc."""
+    cmd = [
+        "pandoc",
+        str(source),
+        "-f", "odt",
+        "-t", "gfm",
+        "--wrap=none",
+        f"--extract-media={media_dir}",
+        "-o", str(output),
+    ]
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+        if result.returncode != 0:
+            print(f"  ERROR (Pandoc ODT): {result.stderr.strip()}")
+            return False
+        return True
+    except FileNotFoundError:
+        print("  ERROR: Pandoc not installed. Run ./setup.sh first.")
+        return False
+    except subprocess.TimeoutExpired:
+        print("  ERROR: Pandoc timed out.")
+        return False
+
+
+def convert_txt(source: Path, output: Path) -> bool:
+    """Convert plain text to Markdown (minimal processing)."""
+    try:
+        try:
+            text = source.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            text = source.read_text(encoding="windows-1252")
+        # Preserve paragraph structure
+        paragraphs = re.split(r"\n{2,}", text.replace("\r\n", "\n").replace("\r", "\n"))
+        md = "\n\n".join(p.strip() for p in paragraphs if p.strip())
+        output.write_text(md, encoding="utf-8")
+        return True
+    except Exception as e:
+        print(f"  ERROR (TXT): {e}")
+        return False
+
+
 def convert_pdf(source: Path, output: Path, media_dir: Path, engine: str) -> bool:
     """Convert PDF to Markdown, trying Marker first, then PyMuPDF4LLM."""
     if engine == "marker":
@@ -159,7 +294,7 @@ def convert_pdf(source: Path, output: Path, media_dir: Path, engine: str) -> boo
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Convert legal textbook chapters (DOCX/PDF) to RAG-optimized Markdown."
+        description="Convert legal textbook chapters (DOCX/PDF/RTF/ODT/TXT) to RAG-optimized Markdown."
     )
     parser.add_argument(
         "--input-dir", default="./source",
@@ -198,7 +333,7 @@ def main():
     # Find source files
     source_files = find_source_files(args.input_dir)
     if not source_files:
-        print(f"No DOCX or PDF files found in '{args.input_dir}'.")
+        print(f"No convertible files found in '{args.input_dir}'.")
         sys.exit(1)
 
     print(f"Found {len(source_files)} source file(s):")
@@ -228,10 +363,17 @@ def main():
 
         # Convert based on file type
         success = False
-        if source.suffix.lower() == ".docx":
+        ext = source.suffix.lower()
+        if ext == ".docx":
             success = convert_docx(source, output_path, media_dir)
-        elif source.suffix.lower() == ".pdf":
+        elif ext == ".pdf":
             success = convert_pdf(source, output_path, media_dir, args.pdf_engine)
+        elif ext == ".rtf":
+            success = convert_rtf(source, output_path, media_dir)
+        elif ext == ".odt":
+            success = convert_odt(source, output_path, media_dir)
+        elif ext == ".txt":
+            success = convert_txt(source, output_path)
 
         if not success:
             print(f"  FAILED: {source.name}")
