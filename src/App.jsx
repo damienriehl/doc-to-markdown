@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import * as mammoth from "mammoth";
+import { resolveInputs } from "./inputResolver.js";
 
 // ─── Chapter Number Inference ────────────────────────────────────────────────
 
@@ -588,9 +589,22 @@ function BookMeta({ book, onChange }) {
   );
 }
 
-function UploadZone({ onFiles, compact }) {
+function UploadZone({ onFiles, onSkipped, onError, onResolving, compact }) {
   const [dragOver, setDragOver] = useState(false);
   const inputRef = useRef(null);
+
+  const processFiles = useCallback(async (rawFiles) => {
+    onResolving?.(true);
+    try {
+      const { files, skippedNames, errors } = await resolveInputs(rawFiles);
+      if (skippedNames.length) onSkipped?.(skippedNames);
+      if (errors.length) onError?.(errors);
+      if (files.length) onFiles(files);
+    } finally {
+      onResolving?.(false);
+    }
+  }, [onFiles, onSkipped, onError, onResolving]);
+
   const handleDrop = useCallback(
     e => {
       e.preventDefault();
@@ -599,13 +613,13 @@ function UploadZone({ onFiles, compact }) {
       const files = Array.from(e.dataTransfer.files).filter(
         f => /\.(docx|pdf|rtf|odt|txt|zip)$/i.test(f.name)
       );
-      if (files.length) onFiles(files);
+      if (files.length) processFiles(files);
     },
-    [onFiles]
+    [processFiles]
   );
   const handleFileInput = e => {
     const files = Array.from(e.target.files);
-    if (files.length) onFiles(files);
+    if (files.length) processFiles(files);
   };
 
   if (compact) {
@@ -1066,6 +1080,9 @@ export default function RAGConverter() {
   const [converting, setConverting] = useState(false);
   const [preview, setPreview] = useState(null);
   const [dragState, setDragState] = useState({ sourceIndex: null, overIndex: null, overPos: null });
+  const [resolving, setResolving] = useState(false);
+  const [skippedFiles, setSkippedFiles] = useState([]);
+  const [importErrors, setImportErrors] = useState([]);
 
   const chaptersRef = useRef(chapters);
   chaptersRef.current = chapters;
@@ -1273,13 +1290,22 @@ export default function RAGConverter() {
     }
   }, []);
 
-  const handlePageDrop = useCallback(e => {
+  const handlePageDrop = useCallback(async (e) => {
     if (!e.dataTransfer.types.includes("Files")) return;
     e.preventDefault();
-    const files = Array.from(e.dataTransfer.files).filter(
+    const rawFiles = Array.from(e.dataTransfer.files).filter(
       f => /\.(docx|pdf|rtf|odt|txt|zip)$/i.test(f.name)
     );
-    if (files.length) addFiles(files);
+    if (!rawFiles.length) return;
+    setResolving(true);
+    try {
+      const { files, skippedNames, errors } = await resolveInputs(rawFiles);
+      if (skippedNames.length) setSkippedFiles(prev => [...prev, ...skippedNames]);
+      if (errors.length) setImportErrors(prev => [...prev, ...errors]);
+      if (files.length) addFiles(files);
+    } finally {
+      setResolving(false);
+    }
   }, [addFiles]);
 
   // ─── Derived state ───
@@ -1324,11 +1350,80 @@ export default function RAGConverter() {
 
       <BookMeta book={book} onChange={setBook} />
 
-      <UploadZone onFiles={addFiles} compact={chapters.length > 0} />
+      <UploadZone
+        onFiles={addFiles}
+        onSkipped={names => setSkippedFiles(prev => [...prev, ...names])}
+        onError={errs => setImportErrors(prev => [...prev, ...errs])}
+        onResolving={setResolving}
+        compact={chapters.length > 0}
+      />
 
       {/* Download bar — visible when any conversions exist */}
       {(doneChapters.length > 0 || converting) && (
         <DownloadBar chapters={chapters} book={book} converting={converting} />
+      )}
+
+      {/* Resolving indicator (ZIP extraction / folder scanning) */}
+      {resolving && (
+        <div style={{
+          padding: 16,
+          background: "var(--accent-bg)",
+          borderRadius: 8,
+          marginBottom: 16,
+          fontSize: 13,
+          fontFamily: "var(--font-body)",
+          color: "var(--accent)",
+        }}>
+          Extracting files&hellip;
+        </div>
+      )}
+
+      {/* Skipped files notice (dismissible) */}
+      {skippedFiles.length > 0 && (
+        <div style={{
+          padding: "12px 16px",
+          background: "#fef3c7",
+          borderRadius: 8,
+          marginBottom: 16,
+          fontSize: 13,
+          fontFamily: "var(--font-body)",
+          color: "#92400e",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "flex-start",
+        }}>
+          <div>
+            <strong>{skippedFiles.length} file{skippedFiles.length > 1 ? "s" : ""} skipped</strong> (unsupported: {skippedFiles.slice(0, 5).join(", ")}{skippedFiles.length > 5 ? `, +${skippedFiles.length - 5} more` : ""})
+          </div>
+          <button
+            onClick={() => setSkippedFiles([])}
+            style={{ background: "none", border: "none", color: "#92400e", cursor: "pointer", fontSize: 16, padding: "0 0 0 8px", lineHeight: 1 }}
+          >&times;</button>
+        </div>
+      )}
+
+      {/* Import errors */}
+      {importErrors.length > 0 && (
+        <div style={{
+          padding: "12px 16px",
+          background: "#fef2f2",
+          borderRadius: 8,
+          marginBottom: 16,
+          fontSize: 13,
+          fontFamily: "var(--font-body)",
+          color: "#991b1b",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "flex-start",
+        }}>
+          <div>
+            <strong>Import error{importErrors.length > 1 ? "s" : ""}:</strong> {importErrors.join("; ")}
+          </div>
+          <button
+            onClick={() => setImportErrors([])}
+            style={{ background: "none", border: "none", color: "#991b1b", cursor: "pointer", fontSize: 16, padding: "0 0 0 8px", lineHeight: 1 }}
+          >&times;</button>
+        </div>
       )}
 
       {/* Converting indicator */}
