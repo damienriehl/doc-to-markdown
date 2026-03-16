@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import * as mammoth from "mammoth";
-import { resolveInputs } from "./inputResolver.js";
+import { resolveInputs, resolveDataTransferItems } from "./inputResolver.js";
 
 // ─── Chapter Number Inference ────────────────────────────────────────────────
 
@@ -592,6 +592,14 @@ function BookMeta({ book, onChange }) {
 function UploadZone({ onFiles, onSkipped, onError, onResolving, compact }) {
   const [dragOver, setDragOver] = useState(false);
   const inputRef = useRef(null);
+  const folderInputRef = useRef(null);
+
+  const handleFolderInput = async (e) => {
+    const files = Array.from(e.target.files);
+    if (files.length) processFiles(files);
+    // Reset so the same folder can be selected again
+    e.target.value = "";
+  };
 
   const processFiles = useCallback(async (rawFiles) => {
     onResolving?.(true);
@@ -606,14 +614,21 @@ function UploadZone({ onFiles, onSkipped, onError, onResolving, compact }) {
   }, [onFiles, onSkipped, onError, onResolving]);
 
   const handleDrop = useCallback(
-    e => {
+    async (e) => {
       e.preventDefault();
       if (!e.dataTransfer.types.includes("Files")) return;
       setDragOver(false);
-      const files = Array.from(e.dataTransfer.files).filter(
-        f => /\.(docx|pdf|rtf|odt|txt|zip)$/i.test(f.name)
-      );
-      if (files.length) processFiles(files);
+      // Use webkitGetAsEntry for folder support (must capture entries synchronously)
+      const items = e.dataTransfer.items;
+      if (items && items.length > 0) {
+        const rawFiles = await resolveDataTransferItems(items);
+        if (rawFiles.length) processFiles(rawFiles);
+      } else {
+        const files = Array.from(e.dataTransfer.files).filter(
+          f => /\.(docx|pdf|rtf|odt|txt|zip)$/i.test(f.name)
+        );
+        if (files.length) processFiles(files);
+      }
     },
     [processFiles]
   );
@@ -665,9 +680,31 @@ function UploadZone({ onFiles, onSkipped, onError, onResolving, compact }) {
           color: "var(--accent)",
           fontWeight: 700,
         }}>+</span>
+        <input
+          ref={folderInputRef}
+          type="file"
+          webkitdirectory=""
+          style={{ display: "none" }}
+          onChange={handleFolderInput}
+        />
         <span style={{ fontSize: 13, color: "var(--muted)", fontFamily: "var(--font-body)" }}>
           Drop more files or click to add
         </span>
+        <button
+          onClick={(e) => { e.stopPropagation(); folderInputRef.current?.click(); }}
+          style={{
+            marginLeft: "auto",
+            padding: "4px 10px",
+            fontSize: 11,
+            border: "1px solid var(--border)",
+            borderRadius: 5,
+            background: "transparent",
+            color: "var(--muted)",
+            cursor: "pointer",
+            fontFamily: "var(--font-body)",
+          }}
+          title="Select a folder of chapter files"
+        >&#128193; Folder</button>
       </div>
     );
   }
@@ -708,6 +745,28 @@ function UploadZone({ onFiles, onSkipped, onError, onResolving, compact }) {
       <div style={{ fontSize: 13, color: "var(--muted)", marginTop: 4, fontFamily: "var(--font-body)" }}>
         or click to browse
       </div>
+      <input
+        ref={folderInputRef}
+        type="file"
+        webkitdirectory=""
+        style={{ display: "none" }}
+        onChange={handleFolderInput}
+      />
+      <button
+        onClick={(e) => { e.stopPropagation(); folderInputRef.current?.click(); }}
+        style={{
+          marginTop: 12,
+          padding: "6px 14px",
+          fontSize: 12,
+          border: "1px solid var(--border)",
+          borderRadius: 6,
+          background: "transparent",
+          color: "var(--muted)",
+          cursor: "pointer",
+          fontFamily: "var(--font-body)",
+        }}
+        title="Select a folder of chapter files"
+      >&#128193; Select Folder</button>
     </div>
   );
 }
@@ -1293,12 +1352,19 @@ export default function RAGConverter() {
   const handlePageDrop = useCallback(async (e) => {
     if (!e.dataTransfer.types.includes("Files")) return;
     e.preventDefault();
-    const rawFiles = Array.from(e.dataTransfer.files).filter(
-      f => /\.(docx|pdf|rtf|odt|txt|zip)$/i.test(f.name)
-    );
-    if (!rawFiles.length) return;
     setResolving(true);
     try {
+      // Use webkitGetAsEntry for folder support
+      let rawFiles;
+      const items = e.dataTransfer.items;
+      if (items && items.length > 0) {
+        rawFiles = await resolveDataTransferItems(items);
+      } else {
+        rawFiles = Array.from(e.dataTransfer.files).filter(
+          f => /\.(docx|pdf|rtf|odt|txt|zip)$/i.test(f.name)
+        );
+      }
+      if (!rawFiles.length) return;
       const { files, skippedNames, errors } = await resolveInputs(rawFiles);
       if (skippedNames.length) setSkippedFiles(prev => [...prev, ...skippedNames]);
       if (errors.length) setImportErrors(prev => [...prev, ...errors]);

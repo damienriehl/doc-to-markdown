@@ -131,6 +131,71 @@ export function filterSupportedFiles(files) {
 }
 
 /**
+ * Read ALL entries from a directory reader.
+ * Must loop because Chrome caps each readEntries() call at 100 results.
+ */
+async function readAllEntries(reader) {
+  const allEntries = [];
+  let batch;
+  do {
+    batch = await new Promise((resolve, reject) => {
+      reader.readEntries(resolve, reject);
+    });
+    allEntries.push(...batch);
+  } while (batch.length > 0);
+  return allEntries;
+}
+
+/**
+ * Recursively traverse a FileSystemEntry and collect all File objects.
+ */
+async function traverseEntry(entry, files) {
+  if (entry.isFile) {
+    const file = await new Promise((resolve, reject) => {
+      entry.file(resolve, reject);
+    });
+    // Skip OS artifacts and unsupported files
+    if (!isOsArtifact(entry.fullPath) && (isSupportedFile(file.name) || getExtension(file.name) === "zip")) {
+      files.push(file);
+    }
+  } else if (entry.isDirectory) {
+    // Skip OS artifact directories
+    const dirName = entry.name;
+    if (dirName.startsWith(".") || dirName === "__MACOSX" || dirName === "__pycache__") return;
+
+    const allEntries = await readAllEntries(entry.createReader());
+    await Promise.all(allEntries.map(child => traverseEntry(child, files)));
+  }
+}
+
+/**
+ * Resolve drag-and-drop DataTransferItems, handling folders via webkitGetAsEntry.
+ * Returns raw File[] (folders recursively traversed, regular files passed through).
+ */
+export async function resolveDataTransferItems(dataTransferItems) {
+  const entries = [];
+  const plainFiles = [];
+
+  for (const item of dataTransferItems) {
+    if (item.kind !== "file") continue;
+    const entry = item.webkitGetAsEntry?.() || item.getAsEntry?.();
+    if (entry) {
+      entries.push(entry);
+    } else {
+      // Fallback: no entry API support, get file directly
+      const file = item.getAsFile();
+      if (file) plainFiles.push(file);
+    }
+  }
+
+  if (entries.length === 0) return plainFiles;
+
+  const files = [...plainFiles];
+  await Promise.all(entries.map(entry => traverseEntry(entry, files)));
+  return files;
+}
+
+/**
  * Resolve inputs: extract ZIPs, pass through regular files.
  * Returns { files: File[], skippedNames: string[], errors: string[] }.
  */
