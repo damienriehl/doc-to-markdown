@@ -1,5 +1,17 @@
 import "fake-indexeddb/auto";
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
+
+// --- localStorage mock ---------
+// Vitest runs in Node environment where localStorage is a non-functional stub.
+// Provide a functional in-memory replacement so saveLastProjectId/getLastProjectId tests work.
+const _localStorageMap = new Map();
+const localStorageMock = {
+  getItem: (key) => _localStorageMap.get(key) ?? null,
+  setItem: (key, value) => { _localStorageMap.set(key, String(value)); },
+  removeItem: (key) => { _localStorageMap.delete(key); },
+  clear: () => { _localStorageMap.clear(); },
+};
+vi.stubGlobal("localStorage", localStorageMock);
 import {
   putProject,
   getProject,
