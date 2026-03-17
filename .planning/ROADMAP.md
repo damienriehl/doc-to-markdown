@@ -29,11 +29,11 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. A project can be saved to IndexedDB and fully retrieved in a subsequent page load (all fields intact)
   4. The last-opened project ID is persisted and survives a browser refresh
   5. `navigator.storage.persist()` is called on first save and its result is handled gracefully
-**Plans**: TBD
+**Plans:** 2 plans
 
 Plans:
-- [ ] 01-01: Define `project.json` schema and implement `projectSerializer.js`
-- [ ] 01-02: Implement `projectDb.js` (Dexie schema, CRUD, blob storage)
+- [ ] 01-01-PLAN.md — Define project.json schema contract and implement projectSerializer.js (serialize/deserialize with File extraction)
+- [ ] 01-02-PLAN.md — Install Dexie.js, implement projectDb.js (IndexedDB CRUD, blob storage, last-project-ID, persistent storage)
 
 ### Phase 2: Core Save / Load / Switch
 **Goal**: Users can name, save, reload, and switch between projects without re-importing files
