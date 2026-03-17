@@ -32,8 +32,8 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans:** 2/2 plans complete
 
 Plans:
-- [ ] 01-01-PLAN.md — Define project.json schema contract and implement projectSerializer.js (serialize/deserialize with File extraction)
-- [ ] 01-02-PLAN.md — Install Dexie.js, implement projectDb.js (IndexedDB CRUD, blob storage, last-project-ID, persistent storage)
+- [x] 01-01-PLAN.md — Define project.json schema contract and implement projectSerializer.js (serialize/deserialize with File extraction)
+- [x] 01-02-PLAN.md — Install Dexie.js, implement projectDb.js (IndexedDB CRUD, blob storage, last-project-ID, persistent storage)
 
 ### Phase 2: Core Save / Load / Switch
 **Goal**: Users can name, save, reload, and switch between projects without re-importing files
@@ -45,12 +45,11 @@ Plans:
   3. After a page refresh, the last-opened project loads automatically without user action
   4. A visible badge in the header shows "Unsaved", "Saving...", or "Saved" based on actual state
   5. Switching to another project while unsaved changes exist shows a warning dialog; confirming discards changes, canceling stays on the current project
-**Plans**: TBD
+**Plans:** 2 plans
 
 Plans:
-- [ ] 02-01: Implement `useProjectStore.js` (boot hydration, load-sequence token, isDirty flag)
-- [ ] 02-02: Refactor `App.jsx` state into `useProjectStore`
-- [ ] 02-03: Build `ProjectList.jsx` with switcher, project cards (name, date, file count), save-state badge, and unsaved-changes modal
+- [ ] 02-01-PLAN.md — Implement useProjectStore.js hook (boot hydration, save/load, isDirty, load-sequence token, beforeunload guard) with tests
+- [ ] 02-02-PLAN.md — Lift App.jsx state into useProjectStore, build ProjectList.jsx with project cards, save-state badge, and unsaved-changes modal
 
 ### Phase 3: Project Management + Server Persistence
 **Goal**: Users can manage their project library (rename, delete) and projects are durably backed on the filesystem
@@ -89,6 +88,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Storage Foundation | 2/2 | Complete   | 2026-03-17 |
-| 2. Core Save / Load / Switch | 0/3 | Not started | - |
+| 2. Core Save / Load / Switch | 0/2 | Not started | - |
 | 3. Project Management + Server Persistence | 0/2 | Not started | - |
 | 4. Export / Import | 0/2 | Not started | - |
