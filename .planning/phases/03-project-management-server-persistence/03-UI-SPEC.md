@@ -58,7 +58,6 @@ Declared values (multiples of 4):
 |-------|-------|-------|
 | xs | 4px | Button icon gaps, badge internal padding, inline icon spacing |
 | sm | 8px | Gap between sibling buttons, card header internal spacing |
-| md | 12px | Project card padding (established: `padding: "10px 12px"`) |
 | md+ | 16px | Modal internal padding sections, section gaps |
 | lg | 24px | Modal padding (established: `padding: 24`), main layout padding |
 | xl | 32px | Page top padding (established: `padding: "32px 24px"`) |
@@ -66,27 +65,34 @@ Declared values (multiples of 4):
 Source: Extracted from existing `src/App.jsx` and `src/ProjectList.jsx` spacing values.
 
 Exceptions:
-- Hover-action icon buttons: 28px minimum touch target (inline 28×28px) — desktop-only tool, no mobile 44px requirement
-- Server status dot: 8×8px circle — purely visual indicator, not interactive touch target
-- Rename input: fills project name slot exactly — inherits card padding, no extra margin
+- 12px horizontal card padding: pre-existing in `ProjectList.jsx` card (`padding: "10px 12px"`) — not introduced by this phase; exempt from standard set constraint. Do not change.
+- 10px vertical card padding: pre-existing in `ProjectList.jsx` card (`padding: "10px 12px"`) — not introduced by this phase; not a multiple of 4 but exempt as a pre-existing value. Do not change.
+- Hover-action icon buttons: 28px minimum touch target (inline 28×28px) — desktop-only tool, no mobile 44px requirement.
+- Server status dot: 8×8px circle — purely visual indicator, not interactive touch target.
+- Rename input: fills project name slot exactly — inherits card padding, no extra margin.
 
 ---
 
 ## Typography
 
+Declared sizes (maximum 4):
+
 | Role | Size | Weight | Line Height | Font | Usage |
 |------|------|--------|-------------|------|-------|
 | Body | 13px | 400 | 1.5 | `--font-body` | Modal body text, metadata descriptions, empty state copy |
-| Label | 14px | 600 | 1.3 | `--font-body` | Project card names, inline rename input |
+| Label | 14px | 400 | 1.3 | `--font-body` | Project card names, inline rename input |
 | Heading | 16px | 700 | 1.2 | `--font-body` | Modal title (h3) |
 | Display | 22px | 700 | 1.1 | `--font-body` | App h1 "RAG Converter" (existing — do not change) |
 
+Declared weights (maximum 2): 400 (normal), 700 (bold).
+
 Source: Extracted from existing `src/App.jsx` fontSizes: 13 (body/muted), 14 (card name), 16 (modal h3), 22 (h1).
 
-Additional rules:
-- Badge / status indicators: 11px, weight 500–600, `--font-mono`
-- File count / timestamp metadata: 12px, weight 400, `--font-body`, color `--muted`
-- Rename input: 14px, weight 400 (not 600 while in edit mode), `--font-body` — text pre-selected on mount
+Additional rules (no new declared sizes — use relative sizing only):
+- Badge / status indicators: `font-size: 0.85em` relative to parent context, weight 400, `--font-mono` — size and monospace face alone distinguish these from body text; no independent scale entry.
+- File count / timestamp metadata: `font-size: 0.92em` relative to parent context, weight 400, `--font-body`, color `--muted` — no independent scale entry.
+- Rename input: 14px (Label), weight 400 (not 700 while in edit mode), `--font-body` — text pre-selected on mount.
+- Delete button: 13px (Body), weight 700, `--font-body`.
 
 ---
 
@@ -110,7 +116,7 @@ Source: `src/App.jsx` lines 1450–1458 + existing modal pattern line 1586.
 - Server status dot when server is connected: `#10b981` (green — not accent, semantic-only)
 
 **NOT accent:**
-- Cancel buttons (use `--bg` + `--border`)
+- Keep Project / cancel buttons (use `--bg` + `--border`)
 - Hover icon buttons for rename/delete (use `--bg` + `--border`, NOT `--accent`)
 - Modal overlays (use `rgba(0,0,0,0.5)`)
 - Server status dot when offline: `#9ca3af` (gray — semantic-only)
@@ -122,6 +128,12 @@ Source: `src/App.jsx` lines 1450–1458 + existing modal pattern line 1586.
 
 ---
 
+## Visual Hierarchy
+
+Primary visual anchor: App h1 "RAG Converter" at 22px/700; secondary focal anchor on hover: project card with `--accent-dim` background reveal.
+
+---
+
 ## Component Contracts
 
 ### 1. Hover Action Buttons (pencil + trash)
@@ -130,7 +142,7 @@ Source: `src/App.jsx` lines 1450–1458 + existing modal pattern line 1586.
 - Placement: right side of project card, inside the existing `justifyContent: "space-between"` flex row
 - Size: 28×28px, `borderRadius: 4`, `border: "1px solid var(--border)"`, `background: "var(--bg)"`
 - Pencil icon: Unicode `✏` (`&#x270F;`) or inline SVG `<path d="M11 4H4a2 2 0 0 0-2 2v14..."/>` at 14px
-- Trash icon: Unicode `🗑` or inline SVG at 14px — MUST NOT use emoji in production; use SVG path
+- Trash icon: inline SVG at 14px — MUST NOT use emoji in production; use SVG path
 - Pencil: `title="Rename project"`, `aria-label="Rename project"`
 - Trash: `title="Delete project"`, `aria-label="Delete project"`, text/icon color `#dc2626` on hover
 - Both: `onClick={e => { e.stopPropagation(); ... }}` — prevents card click triggering project switch
@@ -157,8 +169,8 @@ Mirrors existing unsaved-changes modal in `src/App.jsx` lines 1560–1595. Same 
 - Title (h3): `fontSize: 16, fontWeight: 700, margin: "0 0 8px"`
 - Body (p): `fontSize: 13, color: "var(--muted)", margin: "0 0 16px", lineHeight: 1.5`
 - Button row: `display: "flex", gap: 8, justifyContent: "flex-end"`
-- Cancel button: `padding: "6px 16px", fontSize: 13, border: "1px solid var(--border)", borderRadius: 6, background: "var(--bg)", color: "var(--text)"` — default focus target
-- Delete button: `padding: "6px 16px", fontSize: 13, border: "1px solid #dc2626", borderRadius: 6, background: "#dc2626", color: "#fff", fontWeight: 600` — NOT default focus target
+- Keep Project button: `padding: "6px 16px", fontSize: 13, border: "1px solid var(--border)", borderRadius: 6, background: "var(--bg)", color: "var(--text)"` — default focus target; label "Keep Project"
+- Delete button: `padding: "6px 16px", fontSize: 13, border: "1px solid #dc2626", borderRadius: 6, background: "#dc2626", color: "#fff", fontWeight: 700` — NOT default focus target; label "Delete Project"
 - State: `deleteTarget: { id, name, chapters }` as local state in `ProjectList.jsx` — null = modal closed
 - Modal placement: bottom of `ProjectList.jsx` return, before closing `</div>`
 
@@ -187,7 +199,7 @@ Mirrors existing unsaved-changes modal in `src/App.jsx` lines 1560–1595. Same 
 | Hover icon: trash | Hovered | icon color shifts to `#dc2626` |
 | Server dot | Connected | `#10b981` green |
 | Server dot | Offline | `#9ca3af` gray |
-| Delete modal | Open | Full-screen backdrop, box centered, Cancel is default |
+| Delete modal | Open | Full-screen backdrop, box centered, Keep Project is default focus |
 | Delete modal | Pending delete | No loading state — operation is instant from user's perspective |
 
 ---
@@ -202,7 +214,7 @@ Mirrors existing unsaved-changes modal in `src/App.jsx` lines 1560–1595. Same 
 | Delete modal body | "Delete **{project.name}**? This project has {N} file{s} and cannot be recovered." |
 | Delete modal — warning note | "This cannot be undone." (separate line, same muted color) |
 | Delete modal confirm button | "Delete Project" |
-| Delete modal cancel button | "Cancel" |
+| Delete modal cancel button | "Keep Project" |
 | Rename input placeholder | (none — input is pre-seeded with current project name, no placeholder needed) |
 | Empty rename — validation | (no toast — simply retain red border and keep focus; do not submit) |
 | Server dot — connected tooltip | "Server connected — projects backed to disk" |
@@ -211,11 +223,13 @@ Mirrors existing unsaved-changes modal in `src/App.jsx` lines 1560–1595. Same 
 
 Source: Delete modal copy — informed by CONTEXT.md "Modal shows project name, file count, and 'This cannot be undone' warning".
 Server dot tooltip — verbatim from CONTEXT.md.
+"Keep Project" label — names what is preserved, makes the alternative to deletion explicit.
 
 **Tone rules for this phase:**
 - Direct, no ellipsis on button labels ("Delete Project" not "Deleting...")
 - File count uses singular/plural: "1 file" / "3 files"
 - No exclamation points in destructive contexts
+- Cancel alternatives name what is preserved, not the action being cancelled
 
 ---
 
@@ -243,7 +257,7 @@ Do not add new animation keyframes unless they match the existing `fadeSlideIn` 
 | Hover icons focusable without hover | Icons visible when button receives `:focus-visible` even if mouse not over card |
 | Rename input `aria-label` | `aria-label="Rename project: {project.name}"` |
 | Delete button `aria-label` | `aria-label="Delete project: {project.name}"` |
-| Modal focus trap | Cancel button receives focus on modal open (`autoFocus` on Cancel) |
+| Modal focus trap | Keep Project button receives focus on modal open (`autoFocus` on Keep Project) |
 | Escape closes modal | `onKeyDown` on modal container: Escape → close |
 | Server dot `aria-hidden` | `aria-hidden="true"` — decorative only; screen reader information via tooltip text on a sibling element if needed |
 | Focus ring | Inherited from `index.css :focus-visible` — `outline: 2px solid #2563eb; outline-offset: 2px` |
