@@ -29,7 +29,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. A project can be saved to IndexedDB and fully retrieved in a subsequent page load (all fields intact)
   4. The last-opened project ID is persisted and survives a browser refresh
   5. `navigator.storage.persist()` is called on first save and its result is handled gracefully
-**Plans:** 2 plans
+**Plans:** 1/2 plans executed
 
 Plans:
 - [ ] 01-01-PLAN.md — Define project.json schema contract and implement projectSerializer.js (serialize/deserialize with File extraction)
@@ -88,7 +88,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Storage Foundation | 0/2 | Not started | - |
+| 1. Storage Foundation | 1/2 | In Progress|  |
 | 2. Core Save / Load / Switch | 0/3 | Not started | - |
 | 3. Project Management + Server Persistence | 0/2 | Not started | - |
 | 4. Export / Import | 0/2 | Not started | - |

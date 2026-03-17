@@ -7,8 +7,8 @@
 
 ### Storage
 
-- [ ] **STOR-01**: User can save current workspace to IndexedDB with a user-chosen name
-- [ ] **STOR-02**: User can load a saved project, restoring all files, settings, outputs, and UI state
+- [x] **STOR-01**: User can save current workspace to IndexedDB with a user-chosen name
+- [x] **STOR-02**: User can load a saved project, restoring all files, settings, outputs, and UI state
 - [ ] **STOR-03**: App automatically restores the last-opened project on page reload
 - [ ] **STOR-04**: Source files (DOCX/PDF/RTF/ODT/TXT) are stored as blobs so they can be re-converted later
 
@@ -62,8 +62,8 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| STOR-01 | Phase 1 | Pending |
-| STOR-02 | Phase 1 | Pending |
+| STOR-01 | Phase 1 | Complete |
+| STOR-02 | Phase 1 | Complete |
 | STOR-03 | Phase 1 | Pending |
 | STOR-04 | Phase 1 | Pending |
 | PROJ-01 | Phase 2 | Pending |
