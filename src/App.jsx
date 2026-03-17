@@ -4,6 +4,8 @@ import { resolveInputs, resolveDataTransferItems } from "./inputResolver.js";
 import { convertRtf } from "./convertRtf.js";
 import { convertOdt } from "./convertOdt.js";
 import { isServerAvailable, convertViaServer } from "./serverApi.js";
+import { useProjectStore } from "./useProjectStore.js";
+import { ProjectList } from "./ProjectList.jsx";
 
 // ─── Chapter Number Inference ────────────────────────────────────────────────
 
@@ -1138,14 +1140,25 @@ const fileRowStyle = {
 // ─── Main App ────────────────────────────────────────────────────────────────
 
 export default function RAGConverter() {
-  const [book, setBook] = useState({ title: "", author: "" });
-  const [chapters, setChapters] = useState([]);
+  const {
+    book, setBook, chapters, setChapters,
+    activeProjectId, activeProjectName, projectList,
+    isDirty, saveStatus, bootStatus,
+    save, load, switchProject, confirmSwitch, cancelSwitch, newProject,
+  } = useProjectStore();
   const [converting, setConverting] = useState(false);
   const [preview, setPreview] = useState(null);
   const [dragState, setDragState] = useState({ sourceIndex: null, overIndex: null, overPos: null });
   const [resolving, setResolving] = useState(false);
   const [skippedFiles, setSkippedFiles] = useState([]);
   const [importErrors, setImportErrors] = useState([]);
+  const [projectNameInput, setProjectNameInput] = useState("");
+  const [showSwitchConfirm, setShowSwitchConfirm] = useState(null);
+
+  // Sync project name input when active project changes
+  useEffect(() => {
+    setProjectNameInput(activeProjectName);
+  }, [activeProjectName]);
 
   const chaptersRef = useRef(chapters);
   chaptersRef.current = chapters;
@@ -1413,6 +1426,22 @@ export default function RAGConverter() {
   const errors = chapters.filter(c => c.status === "error");
   const indexContent = doneChapters.length ? buildIndexFile(doneChapters, book) : null;
 
+  // ─── Boot loading gate ───
+  if (bootStatus !== "ready") {
+    return (
+      <div style={{
+        padding: "60px 24px",
+        maxWidth: 780,
+        margin: "0 auto",
+        fontFamily: "var(--font-body)",
+        color: "var(--muted)",
+        textAlign: "center",
+      }}>
+        Loading workspace...
+      </div>
+    );
+  }
+
   return (
     <div
       onDragOver={handlePageDragOver}
@@ -1438,13 +1467,132 @@ export default function RAGConverter() {
     >
       {/* Header */}
       <div style={{ marginBottom: 28 }}>
-        <h1 style={{ fontSize: 22, fontWeight: 700, margin: 0, letterSpacing: "-0.02em" }}>
-          RAG Converter
-        </h1>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+          <h1 style={{ fontSize: 22, fontWeight: 700, margin: 0, letterSpacing: "-0.02em" }}>
+            RAG Converter
+          </h1>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            {/* Save-state badge */}
+            <span style={{
+              fontSize: 11,
+              fontFamily: "var(--font-mono)",
+              padding: "2px 8px",
+              borderRadius: 4,
+              background: saveStatus === "saved" ? "#d1fae5" : saveStatus === "saving" ? "#fef3c7" : "#fef2f2",
+              color: saveStatus === "saved" ? "#065f46" : saveStatus === "saving" ? "#92400e" : "#991b1b",
+            }}>
+              {saveStatus === "saved" ? "Saved" : saveStatus === "saving" ? "Saving..." : "Unsaved"}
+            </span>
+          </div>
+        </div>
+
+        {/* Project name + save controls */}
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+          <input
+            type="text"
+            value={projectNameInput}
+            placeholder="Project name..."
+            onChange={e => setProjectNameInput(e.target.value)}
+            style={{
+              flex: 1,
+              padding: "6px 10px",
+              fontSize: 14,
+              fontFamily: "var(--font-body)",
+              border: "1px solid var(--border)",
+              borderRadius: 6,
+              background: "var(--bg)",
+              color: "var(--text)",
+              outline: "none",
+            }}
+          />
+          <button
+            onClick={() => save(projectNameInput.trim() || "Untitled")}
+            style={{
+              padding: "6px 16px",
+              fontSize: 13,
+              fontFamily: "var(--font-body)",
+              fontWeight: 600,
+              border: "1px solid var(--accent)",
+              borderRadius: 6,
+              background: "var(--accent)",
+              color: "#fff",
+              cursor: "pointer",
+            }}
+          >
+            Save
+          </button>
+          <button
+            onClick={newProject}
+            style={{
+              padding: "6px 12px",
+              fontSize: 13,
+              fontFamily: "var(--font-body)",
+              border: "1px solid var(--border)",
+              borderRadius: 6,
+              background: "var(--bg)",
+              color: "var(--text)",
+              cursor: "pointer",
+            }}
+          >
+            New
+          </button>
+        </div>
+
         <p style={{ fontSize: 13, color: "var(--muted)", margin: "4px 0 0", lineHeight: 1.5 }}>
           Convert DOCX, PDF, RTF, ODT, and TXT chapters to RAG-optimized Markdown &mdash; with YAML metadata, heading normalization, and a cross-reference index.
         </p>
       </div>
+
+      <ProjectList
+        projects={projectList}
+        activeProjectId={activeProjectId}
+        isDirty={isDirty}
+        onSwitch={async (id) => {
+          const result = await switchProject(id);
+          if (result?.blocked) {
+            setShowSwitchConfirm(result.pendingId);
+          }
+        }}
+        onNew={newProject}
+      />
+
+      {/* Unsaved-changes confirmation modal */}
+      {showSwitchConfirm && (
+        <div style={{
+          position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 1000,
+          display: "flex", justifyContent: "center", alignItems: "center",
+        }}>
+          <div style={{
+            background: "var(--bg)", borderRadius: 12, padding: 24, maxWidth: 400,
+            border: "1px solid var(--border)", boxShadow: "0 8px 32px rgba(0,0,0,0.2)",
+          }}>
+            <h3 style={{ margin: "0 0 8px", fontSize: 16, fontWeight: 700 }}>Unsaved Changes</h3>
+            <p style={{ fontSize: 13, color: "var(--muted)", margin: "0 0 16px", lineHeight: 1.5 }}>
+              You have unsaved changes. Switch projects anyway? Your changes will be lost.
+            </p>
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              <button
+                onClick={() => { cancelSwitch(); setShowSwitchConfirm(null); }}
+                style={{
+                  padding: "6px 16px", fontSize: 13, border: "1px solid var(--border)",
+                  borderRadius: 6, background: "var(--bg)", color: "var(--text)", cursor: "pointer",
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => { await confirmSwitch(); setShowSwitchConfirm(null); }}
+                style={{
+                  padding: "6px 16px", fontSize: 13, border: "1px solid #dc2626",
+                  borderRadius: 6, background: "#dc2626", color: "#fff", cursor: "pointer", fontWeight: 600,
+                }}
+              >
+                Discard &amp; Switch
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <BookMeta book={book} onChange={setBook} />
 
