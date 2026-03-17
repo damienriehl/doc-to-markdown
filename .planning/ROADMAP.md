@@ -13,7 +13,7 @@ Build a workspace persistence system on top of the existing doc-to-markdown conv
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Storage Foundation** - IndexedDB schema, serializer, and CRUD layer — no UI (completed 2026-03-17)
-- [ ] **Phase 2: Core Save / Load / Switch** - React hook, App.jsx lift, project list, save-state indicator, unsaved-changes guard
+- [x] **Phase 2: Core Save / Load / Switch** - React hook, App.jsx lift, project list, save-state indicator, unsaved-changes guard (completed 2026-03-17)
 - [ ] **Phase 3: Project Management + Server Persistence** - Rename, delete w/ confirmation, FastAPI project routes, dual-store save
 - [ ] **Phase 4: Export / Import** - ZIP export (full + outputs-only), ZIP import, export/import UI
 
@@ -45,7 +45,7 @@ Plans:
   3. After a page refresh, the last-opened project loads automatically without user action
   4. A visible badge in the header shows "Unsaved", "Saving...", or "Saved" based on actual state
   5. Switching to another project while unsaved changes exist shows a warning dialog; confirming discards changes, canceling stays on the current project
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 
 Plans:
 - [ ] 02-01-PLAN.md — Implement useProjectStore.js hook (boot hydration, save/load, isDirty, load-sequence token, beforeunload guard) with tests
@@ -88,6 +88,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Storage Foundation | 2/2 | Complete   | 2026-03-17 |
-| 2. Core Save / Load / Switch | 1/2 | In Progress|  |
+| 2. Core Save / Load / Switch | 2/2 | Complete   | 2026-03-17 |
 | 3. Project Management + Server Persistence | 0/2 | Not started | - |
 | 4. Export / Import | 0/2 | Not started | - |

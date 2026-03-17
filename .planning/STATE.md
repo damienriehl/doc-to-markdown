@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: in_progress
-stopped_at: Completed 02-01-PLAN.md
-last_updated: "2026-03-17T15:59:00Z"
-last_activity: 2026-03-17 — Completed plan 02-01 (useProjectStore hook)
+stopped_at: Completed 02-02-PLAN.md (checkpoint:human-verify pending)
+last_updated: "2026-03-17T16:04:15Z"
+last_activity: 2026-03-17 — Completed plan 02-02 tasks 1-2 (App.jsx state lift + ProjectList); awaiting human visual verify
 progress:
   total_phases: 4
   completed_phases: 1
   total_plans: 3
-  completed_plans: 3
-  percent: 37
+  completed_plans: 4
+  percent: 44
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-03-17)
 ## Current Position
 
 Phase: 2 of 4 (Core Save/Load/Switch) — IN PROGRESS
-Plan: 1 of 3 in current phase — COMPLETE
-Status: Phase 2 plan 01 complete, ready for plan 02-02
-Last activity: 2026-03-17 — Completed plan 02-01 (useProjectStore hook)
+Plan: 2 of 3 in current phase — AWAITING CHECKPOINT
+Status: Phase 2 plan 02 tasks 1-2 complete; Task 3 is checkpoint:human-verify (visual browser verification required)
+Last activity: 2026-03-17 — Completed plan 02-02 (App.jsx state lift + ProjectList)
 
-Progress: [███░░░░░░░] 37%
+Progress: [████░░░░░░] 44%
 
 ## Performance Metrics
 
@@ -44,7 +44,7 @@ Progress: [███░░░░░░░] 37%
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01-storage-foundation | 2/2 | 6 min | 3 min |
-| 02-core-save-load-switch | 1/3 | 3 min | 3 min |
+| 02-core-save-load-switch | 2/3 | 5 min | 2.5 min |
 
 **Recent Trend:**
 - Last 5 plans: 01-01 (2 min), 01-02 (4 min), 02-01 (3 min)
@@ -54,6 +54,7 @@ Progress: [███░░░░░░░] 37%
 | Phase 01-storage-foundation P01 | 2 | 2 tasks | 2 files |
 | Phase 01-storage-foundation P02 | 4 | 3 commits | 4 files |
 | Phase 02-core-save-load-switch P01 | 3 | 1 task (TDD) | 2 files |
+| Phase 02-core-save-load-switch P02 | 2 | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -79,6 +80,10 @@ Recent decisions affecting current work:
 - [Phase 02-01]: buildSnapshot excludes file and _dragging — prevents phantom dirty detection from transient fields
 - [Phase 02-01]: isDirty when savedSnapshotRef.current === null: dirty only if chapters.length > 0 || book.title !== ""
 - [Phase 02-01]: Tests structured without @testing-library/react — exported buildSnapshot + direct IDB calls in fake-indexeddb
+- [Phase 02-02]: projectNameInput is local state synced from activeProjectName via useEffect — separates controlled input from persistence state
+- [Phase 02-02]: showSwitchConfirm stores pendingId string (not boolean) — null = closed, non-null = modal open, future-proofs for displaying target project name
+- [Phase 02-02]: Boot gate as early return (not conditional JSX) — prevents refs/effects running on partially-hydrated state
+- [Phase 02-02]: ProjectList collapsed by default — progressive disclosure, reduces visual noise during conversion work
 
 ### Pending Todos
 
@@ -91,6 +96,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-17T15:59:00Z
-Stopped at: Completed 02-01-PLAN.md
+Last session: 2026-03-17T16:04:15Z
+Stopped at: Completed 02-02-PLAN.md tasks 1-2; checkpoint:human-verify pending (Task 3)
 Resume file: None
