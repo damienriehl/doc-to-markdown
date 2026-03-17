@@ -1144,7 +1144,9 @@ export default function RAGConverter() {
     book, setBook, chapters, setChapters,
     activeProjectId, activeProjectName, projectList,
     isDirty, saveStatus, bootStatus,
+    serverConnected,
     save, load, switchProject, confirmSwitch, cancelSwitch, newProject,
+    renameProject, deleteProject,
   } = useProjectStore();
   const [converting, setConverting] = useState(false);
   const [preview, setPreview] = useState(null);
@@ -1472,6 +1474,20 @@ export default function RAGConverter() {
             RAG Converter
           </h1>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            {/* Server status dot */}
+            <span
+              title={serverConnected
+                ? "Server connected \u2014 projects backed to disk"
+                : "Server offline \u2014 saving to browser only"
+              }
+              aria-hidden="true"
+              style={{
+                display: "inline-block", width: 8, height: 8,
+                borderRadius: "50%",
+                background: serverConnected ? "#10b981" : "#9ca3af",
+                cursor: "default",
+              }}
+            />
             {/* Save-state badge */}
             <span style={{
               fontSize: 11,
@@ -1554,6 +1570,8 @@ export default function RAGConverter() {
           }
         }}
         onNew={newProject}
+        onRename={renameProject}
+        onDelete={deleteProject}
       />
 
       {/* Unsaved-changes confirmation modal */}
