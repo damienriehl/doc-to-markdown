@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: completed
-stopped_at: Completed 01-02-PLAN.md
-last_updated: "2026-03-17T15:26:55.582Z"
-last_activity: 2026-03-17 — Completed plan 01-02 (projectDb — Dexie IndexedDB layer)
+status: in_progress
+stopped_at: Completed 02-01-PLAN.md
+last_updated: "2026-03-17T15:59:00Z"
+last_activity: 2026-03-17 — Completed plan 02-01 (useProjectStore hook)
 progress:
   total_phases: 4
   completed_phases: 1
-  total_plans: 2
-  completed_plans: 2
-  percent: 25
+  total_plans: 3
+  completed_plans: 3
+  percent: 37
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-17)
 
 **Core value:** Users can switch between 5-15 book projects instantly, with full state restoration — files, settings, outputs, and UI — so they never lose work or repeat setup.
-**Current focus:** Phase 1 — Storage Foundation
+**Current focus:** Phase 2 — Core Save/Load/Switch
 
 ## Current Position
 
-Phase: 1 of 4 (Storage Foundation) — COMPLETE
-Plan: 2 of 2 in current phase — COMPLETE
-Status: Phase 1 complete, ready for Phase 2
-Last activity: 2026-03-17 — Completed plan 01-02 (projectDb — Dexie IndexedDB layer)
+Phase: 2 of 4 (Core Save/Load/Switch) — IN PROGRESS
+Plan: 1 of 3 in current phase — COMPLETE
+Status: Phase 2 plan 01 complete, ready for plan 02-02
+Last activity: 2026-03-17 — Completed plan 02-01 (useProjectStore hook)
 
-Progress: [██░░░░░░░░] 25%
+Progress: [███░░░░░░░] 37%
 
 ## Performance Metrics
 
@@ -44,14 +44,16 @@ Progress: [██░░░░░░░░] 25%
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01-storage-foundation | 2/2 | 6 min | 3 min |
+| 02-core-save-load-switch | 1/3 | 3 min | 3 min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (2 min), 01-02 (4 min)
+- Last 5 plans: 01-01 (2 min), 01-02 (4 min), 02-01 (3 min)
 - Trend: stable
 
 *Updated after each plan completion*
 | Phase 01-storage-foundation P01 | 2 | 2 tasks | 2 files |
 | Phase 01-storage-foundation P02 | 4 | 3 commits | 4 files |
+| Phase 02-core-save-load-switch P01 | 3 | 1 task (TDD) | 2 files |
 
 ## Accumulated Context
 
@@ -73,6 +75,10 @@ Recent decisions affecting current work:
 - [Phase 01-02]: vi.stubGlobal localStorage mock for Vitest node env — Node 25's localStorage stub is non-functional; Map-backed mock avoids jsdom dependency
 - [Phase 01-02]: _resetDbForTest() calls close() + delete() — both required for test isolation with fake-indexeddb
 - [Phase 01-02]: bulkPut for file blobs — single transaction over N, matches Dexie best practice
+- [Phase 02-01]: savedSnapshotRef set from deserialized values (not React state) on load — prevents false-positive isDirty flicker
+- [Phase 02-01]: buildSnapshot excludes file and _dragging — prevents phantom dirty detection from transient fields
+- [Phase 02-01]: isDirty when savedSnapshotRef.current === null: dirty only if chapters.length > 0 || book.title !== ""
+- [Phase 02-01]: Tests structured without @testing-library/react — exported buildSnapshot + direct IDB calls in fake-indexeddb
 
 ### Pending Todos
 
@@ -85,6 +91,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-17T15:21:31Z
-Stopped at: Completed 01-02-PLAN.md
+Last session: 2026-03-17T15:59:00Z
+Stopped at: Completed 02-01-PLAN.md
 Resume file: None

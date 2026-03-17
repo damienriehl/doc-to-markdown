@@ -21,8 +21,8 @@
 
 ### State Indicators
 
-- [ ] **STAT-01**: User sees a visual indicator showing whether current state is saved or unsaved
-- [ ] **STAT-02**: User is warned before navigating away or switching projects with unsaved changes
+- [x] **STAT-01**: User sees a visual indicator showing whether current state is saved or unsaved
+- [x] **STAT-02**: User is warned before navigating away or switching projects with unsaved changes
 
 ### Export/Import
 
@@ -70,8 +70,8 @@
 | PROJ-02 | Phase 3 | Pending |
 | PROJ-03 | Phase 3 | Pending |
 | PROJ-04 | Phase 2 | Pending |
-| STAT-01 | Phase 2 | Pending |
-| STAT-02 | Phase 2 | Pending |
+| STAT-01 | Phase 2 | Complete |
+| STAT-02 | Phase 2 | Complete |
 | EXPT-01 | Phase 4 | Pending |
 | EXPT-02 | Phase 4 | Pending |
 
