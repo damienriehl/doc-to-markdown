@@ -48,8 +48,8 @@ Plans:
 **Plans:** 2/2 plans complete
 
 Plans:
-- [ ] 02-01-PLAN.md — Implement useProjectStore.js hook (boot hydration, save/load, isDirty, load-sequence token, beforeunload guard) with tests
-- [ ] 02-02-PLAN.md — Lift App.jsx state into useProjectStore, build ProjectList.jsx with project cards, save-state badge, and unsaved-changes modal
+- [x] 02-01-PLAN.md — Implement useProjectStore.js hook (boot hydration, save/load, isDirty, load-sequence token, beforeunload guard) with tests
+- [x] 02-02-PLAN.md — Lift App.jsx state into useProjectStore, build ProjectList.jsx with project cards, save-state badge, and unsaved-changes modal
 
 ### Phase 3: Project Management + Server Persistence
 **Goal**: Users can manage their project library (rename, delete) and projects are durably backed on the filesystem

@@ -47,14 +47,14 @@ completed: 2026-03-17
 
 # Phase 2 Plan 02: App.jsx State Lift + ProjectList Summary
 
-**useProjectStore wired into App.jsx with save/project-name/badge UI, plus new collapsible ProjectList component — 64 tests green, ready for human visual verification**
+**useProjectStore wired into App.jsx with save/project-name/badge UI, plus new collapsible ProjectList component — 64 tests green, all 12 visual verification checks passed in Chrome**
 
 ## Performance
 
 - **Duration:** 2 min
 - **Started:** 2026-03-17T16:02:05Z
 - **Completed:** 2026-03-17T16:04:15Z
-- **Tasks:** 2 of 3 (Task 3 is a human checkpoint)
+- **Tasks:** 3 of 3 (all complete including human visual verification)
 - **Files modified:** 2
 
 ## Accomplishments
@@ -73,6 +73,7 @@ Each task was committed atomically:
 
 1. **Task 1: Lift App.jsx state + header UI** - `49c85a2` (feat)
 2. **Task 2: Create ProjectList component** - `1be3c77` (feat)
+3. **Task 3: Visual verification checkpoint** - Approved by user; all 12 checks passed in Chrome browser testing
 
 ## Files Created/Modified
 
@@ -106,14 +107,21 @@ None — all changes are in-browser React/IndexedDB. No new dependencies.
 - Commit `1be3c77` — Task 2 (ProjectList component)
 - `npx vitest run` — 64/64 tests passing
 
-## Checkpoint Status
+## Checkpoint Verification (Task 3)
 
-Task 3 is a `checkpoint:human-verify` — awaiting visual verification of the complete save/load/switch UX in the browser before marking plan complete.
+All 12 visual verification checks passed in Chrome browser testing:
+- Initial load with no empty-state flash (boot gate working)
+- Import files — Unsaved badge shows; Save — Saved badge confirms
+- Project list shows correct name, date, and file count per card
+- Project switching restores correct files and metadata
+- Unsaved changes modal works: Cancel stays on current project, Discard switches
+- Page refresh auto-loads the last-opened project
 
 ## Next Phase Readiness
 
-- After checkpoint approval: plan 02-02 is complete; proceed to plan 02-03 (if any) or phase wrap-up
-- App.jsx is now fully persistence-aware; all existing converter features work unchanged
+- Plan 02-02 is complete; Phase 2 (Core Save/Load/Switch) is fully done
+- App.jsx is now persistence-aware; all existing converter features work unchanged
+- Phase 3 (Project Management + Server Persistence) is ready to begin: rename, delete, server-side durability
 
 ---
 *Phase: 02-core-save-load-switch*
