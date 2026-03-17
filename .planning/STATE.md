@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 01-01-PLAN.md
-last_updated: "2026-03-17T15:16:11.622Z"
-last_activity: 2026-03-17 — Completed plan 01-01 (projectSerializer)
+stopped_at: Completed 01-02-PLAN.md
+last_updated: "2026-03-17T15:21:31Z"
+last_activity: 2026-03-17 — Completed plan 01-02 (projectDb — Dexie IndexedDB layer)
 progress:
   total_phases: 4
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 2
-  completed_plans: 1
-  percent: 12
+  completed_plans: 2
+  percent: 25
 ---
 
 # Project State
@@ -25,32 +25,33 @@ See: .planning/PROJECT.md (updated 2026-03-17)
 
 ## Current Position
 
-Phase: 1 of 4 (Storage Foundation)
-Plan: 1 of 2 in current phase
-Status: In progress
-Last activity: 2026-03-17 — Completed plan 01-01 (projectSerializer)
+Phase: 1 of 4 (Storage Foundation) — COMPLETE
+Plan: 2 of 2 in current phase — COMPLETE
+Status: Phase 1 complete, ready for Phase 2
+Last activity: 2026-03-17 — Completed plan 01-02 (projectDb — Dexie IndexedDB layer)
 
-Progress: [█░░░░░░░░░] 12%
+Progress: [██░░░░░░░░] 25%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 1
-- Average duration: 2 min
-- Total execution time: 0.03 hours
+- Total plans completed: 2
+- Average duration: 3 min
+- Total execution time: 0.10 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 01-storage-foundation | 1/2 | 2 min | 2 min |
+| 01-storage-foundation | 2/2 | 6 min | 3 min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (2 min)
-- Trend: —
+- Last 5 plans: 01-01 (2 min), 01-02 (4 min)
+- Trend: stable
 
 *Updated after each plan completion*
 | Phase 01-storage-foundation P01 | 2 | 2 tasks | 2 files |
+| Phase 01-storage-foundation P02 | 4 | 3 commits | 4 files |
 
 ## Accumulated Context
 
@@ -69,6 +70,9 @@ Recent decisions affecting current work:
 - [Phase 01-01]: blobId reuses chapter.blobId ?? crypto.randomUUID() for stable blob references across saves
 - [Phase 01-01]: deserializeProject returns null for missing blob entries — explicit null safer for downstream checks
 - [Phase 01-01]: SCHEMA_VERSION = 1 exported as named const for schema drift detection
+- [Phase 01-02]: vi.stubGlobal localStorage mock for Vitest node env — Node 25's localStorage stub is non-functional; Map-backed mock avoids jsdom dependency
+- [Phase 01-02]: _resetDbForTest() calls close() + delete() — both required for test isolation with fake-indexeddb
+- [Phase 01-02]: bulkPut for file blobs — single transaction over N, matches Dexie best practice
 
 ### Pending Todos
 
@@ -81,6 +85,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-17T15:16:11.621Z
-Stopped at: Completed 01-01-PLAN.md
+Last session: 2026-03-17T15:21:31Z
+Stopped at: Completed 01-02-PLAN.md
 Resume file: None

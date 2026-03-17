@@ -12,7 +12,7 @@ Build a workspace persistence system on top of the existing doc-to-markdown conv
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Storage Foundation** - IndexedDB schema, serializer, and CRUD layer — no UI
+- [x] **Phase 1: Storage Foundation** - IndexedDB schema, serializer, and CRUD layer — no UI (completed 2026-03-17)
 - [ ] **Phase 2: Core Save / Load / Switch** - React hook, App.jsx lift, project list, save-state indicator, unsaved-changes guard
 - [ ] **Phase 3: Project Management + Server Persistence** - Rename, delete w/ confirmation, FastAPI project routes, dual-store save
 - [ ] **Phase 4: Export / Import** - ZIP export (full + outputs-only), ZIP import, export/import UI
@@ -29,7 +29,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. A project can be saved to IndexedDB and fully retrieved in a subsequent page load (all fields intact)
   4. The last-opened project ID is persisted and survives a browser refresh
   5. `navigator.storage.persist()` is called on first save and its result is handled gracefully
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 
 Plans:
 - [ ] 01-01-PLAN.md — Define project.json schema contract and implement projectSerializer.js (serialize/deserialize with File extraction)
@@ -88,7 +88,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Storage Foundation | 1/2 | In Progress|  |
+| 1. Storage Foundation | 2/2 | Complete   | 2026-03-17 |
 | 2. Core Save / Load / Switch | 0/3 | Not started | - |
 | 3. Project Management + Server Persistence | 0/2 | Not started | - |
 | 4. Export / Import | 0/2 | Not started | - |
