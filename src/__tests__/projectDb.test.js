@@ -23,6 +23,7 @@ import {
   saveLastProjectId,
   getLastProjectId,
   _resetDbForTest,
+  renameProject,
 } from "../projectDb.js";
 
 // --- Helpers ---------
@@ -136,6 +137,29 @@ describe("deleteProject", () => {
 
     const files = await getFiles("proj-1");
     expect(files.size).toBe(0);
+  });
+});
+
+describe("renameProject", () => {
+  it("updates the name and updatedAt of an existing project", async () => {
+    await putProject(makeProjectRecord({ id: "proj-1", name: "Original" }));
+    await renameProject("proj-1", "Renamed");
+    const result = await getProject("proj-1");
+    expect(result.name).toBe("Renamed");
+    expect(result.updatedAt).not.toBe("2025-06-01T00:00:00.000Z");
+  });
+
+  it("preserves all other fields (book, chapters, uiState)", async () => {
+    await putProject(makeProjectRecord({ id: "proj-1", name: "Original" }));
+    await renameProject("proj-1", "Renamed");
+    const result = await getProject("proj-1");
+    expect(result.book.title).toBe("Book Title");
+    expect(result.chapters.length).toBe(1);
+    expect(result.id).toBe("proj-1");
+  });
+
+  it("is a no-op when project does not exist (no error)", async () => {
+    await expect(renameProject("nonexistent", "Name")).resolves.toBeUndefined();
   });
 });
 

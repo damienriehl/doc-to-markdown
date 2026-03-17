@@ -26,8 +26,11 @@ import {
   saveLastProjectId,
   getLastProjectId,
   requestPersistentStorage,
+  deleteProject as deleteProjectFromDb,
+  renameProject as renameProjectInDb,
 } from "./projectDb.js";
 import { serializeProject, deserializeProject } from "./projectSerializer.js";
+import { isServerAvailable } from "./serverApi.js";
 
 // --- Exported helper (also used internally) ---------------------------------
 
@@ -81,6 +84,7 @@ export function useProjectStore() {
   const [projectList, setProjectList] = useState([]);
   const [bootStatus, setBootStatus] = useState("idle");   // "idle" | "loading" | "ready"
   const [saveStatus, setSaveStatus] = useState("saved");  // "saved" | "unsaved" | "saving"
+  const [serverConnected, setServerConnected] = useState(false);
 
   // Tracks the snapshot at last save/load — used for isDirty comparison
   const savedSnapshotRef = useRef(null);
@@ -114,6 +118,8 @@ export function useProjectStore() {
             savedSnapshotRef.current = buildSnapshot(b, c);
           }
         }
+        // Check server availability for status dot (no extra network round-trip if already cached)
+        isServerAvailable().then(up => setServerConnected(up));
       } finally {
         setBootStatus("ready");
       }
@@ -195,6 +201,48 @@ export function useProjectStore() {
     },
     [book, chapters, activeProjectId, activeProjectName]
   );
+
+  // --- renameProject --------------------------------------------------------
+
+  /**
+   * Rename a project in IndexedDB and update the in-memory project list.
+   * @param {string} id - Project UUID
+   * @param {string} newName - New project name
+   */
+  const renameProject = useCallback(async (id, newName) => {
+    await renameProjectInDb(id, newName);
+    // Update in-memory list optimistically
+    setProjectList(prev => prev.map(p =>
+      p.id === id ? { ...p, name: newName, updatedAt: new Date().toISOString() } : p
+    ));
+    // If renaming the active project, update activeProjectName
+    if (id === activeProjectId) {
+      setActiveProjectName(newName);
+    }
+  }, [activeProjectId]);
+
+  // --- deleteProject --------------------------------------------------------
+
+  /**
+   * Delete a project from IndexedDB and refresh the project list.
+   * If the deleted project is the active one, reset to blank workspace.
+   * @param {string} id - Project UUID
+   */
+  const handleDeleteProject = useCallback(async (id) => {
+    await deleteProjectFromDb(id);
+    const list = await listProjects();
+    setProjectList(list);
+    if (id === activeProjectId) {
+      // Reset to blank workspace when deleting the active project
+      setBook({ title: "", author: "" });
+      setChapters([]);
+      setActiveProjectId(null);
+      setActiveProjectName("");
+      savedSnapshotRef.current = null;
+      setSaveStatus("saved");
+      try { localStorage.removeItem("doc-to-markdown:lastProjectId"); } catch { /* ignore */ }
+    }
+  }, [activeProjectId]);
 
   // --- load -----------------------------------------------------------------
 
@@ -290,11 +338,14 @@ export function useProjectStore() {
     isDirty,
     saveStatus,
     bootStatus,
+    serverConnected,
     save,
     load,
     switchProject,
     confirmSwitch,
     cancelSwitch,
     newProject,
+    renameProject,
+    deleteProject: handleDeleteProject,
   };
 }

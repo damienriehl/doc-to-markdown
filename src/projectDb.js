@@ -120,6 +120,20 @@ export async function deleteProject(id) {
   });
 }
 
+/**
+ * Rename a project by updating its name and updatedAt timestamp.
+ * No-op if the project does not exist.
+ *
+ * @param {string} id - Project UUID
+ * @param {string} newName - New project name
+ * @returns {Promise<void>}
+ */
+export async function renameProject(id, newName) {
+  const record = await getProject(id);
+  if (!record) return;
+  await putProject({ ...record, name: newName, updatedAt: new Date().toISOString() });
+}
+
 // --- File Blob Storage ---------
 
 /**

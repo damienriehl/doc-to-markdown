@@ -31,6 +31,8 @@ import {
   saveLastProjectId,
   getLastProjectId,
   _resetDbForTest,
+  deleteProject,
+  renameProject,
 } from "../projectDb.js";
 import { serializeProject, deserializeProject } from "../projectSerializer.js";
 import { buildSnapshot } from "../useProjectStore.js";
@@ -444,6 +446,56 @@ describe("projectList", () => {
     const list = await listProjects();
     expect(list.length).toBe(2);
     expect(list[0].name).toBe("Beta");
+  });
+});
+
+// --- renameProject persistence -----------------------------------------------
+
+describe("renameProject persistence", () => {
+  it("renameProject updates IDB record name and preserves other fields", async () => {
+    const id = crypto.randomUUID();
+    const { projectRecord } = serializeProject({ id, name: "Old Name", book: defaultBook, chapters: [] });
+    await putProject(projectRecord);
+    await renameProject(id, "New Name");
+    const record = await getProject(id);
+    expect(record.name).toBe("New Name");
+    expect(record.book.title).toBe("Test Book");
+  });
+
+  it("renameProject on nonexistent ID does not throw", async () => {
+    await expect(renameProject("nonexistent", "Name")).resolves.toBeUndefined();
+  });
+});
+
+// --- deleteProject active-project reset --------------------------------------
+
+describe("deleteProject active-project reset", () => {
+  it("after deleting a project, getProject returns undefined", async () => {
+    const id = crypto.randomUUID();
+    const { projectRecord, blobs } = serializeProject({
+      id, name: "To Delete", book: defaultBook,
+      chapters: [makeChapter({ id: "ch-1" })],
+    });
+    await putProject(projectRecord);
+    await putFiles(id, blobs);
+    await deleteProject(id);
+    const record = await getProject(id);
+    expect(record).toBeUndefined();
+    const files = await getFiles(id);
+    expect(files.size).toBe(0);
+  });
+
+  it("after deleting, listProjects no longer includes deleted project", async () => {
+    const id1 = crypto.randomUUID();
+    const id2 = crypto.randomUUID();
+    const { projectRecord: r1 } = serializeProject({ id: id1, name: "Keep", book: defaultBook, chapters: [] });
+    const { projectRecord: r2 } = serializeProject({ id: id2, name: "Delete", book: defaultBook, chapters: [] });
+    await putProject(r1);
+    await putProject(r2);
+    await deleteProject(id2);
+    const list = await listProjects();
+    expect(list.length).toBe(1);
+    expect(list[0].name).toBe("Keep");
   });
 });
 
