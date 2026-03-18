@@ -6,6 +6,7 @@ import { convertOdt } from "./convertOdt.js";
 import { isServerAvailable, convertViaServer } from "./serverApi.js";
 import { useProjectStore } from "./useProjectStore.js";
 import { ProjectList } from "./ProjectList.jsx";
+import { saveFile, saveBlob, smartFilename } from "./fileSaver.js";
 
 // ─── Chapter Number Inference ────────────────────────────────────────────────
 
@@ -422,18 +423,6 @@ function buildIndexFile(chapters, book) {
   return lines.join("\n");
 }
 
-function downloadFile(filename, content) {
-  const blob = new Blob([content], { type: "text/markdown;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-}
-
 // ─── YAML Refresh & Download Utilities ───────────────────────────────────────
 
 function stripYamlFrontMatter(content) {
@@ -480,14 +469,8 @@ async function generateZip(chapters, book) {
   }
   zip.file("00-complete-book.md", generateCombinedMarkdown(chapters, book));
   const blob = await zip.generateAsync({ type: "blob" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `${slugify(book.title || "book")}-markdown.zip`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  const fn = smartFilename("zip", { bookTitle: book.title });
+  await saveBlob(fn, blob);
 }
 
 // ─── DOCX Conversion ─────────────────────────────────────────────────────────
@@ -986,13 +969,13 @@ function DownloadBar({ chapters, book, converting }) {
     const sorted = [...done].sort((a, b) => a.chapterNum - b.chapterNum);
     sorted.forEach((ch, i) => {
       setTimeout(() => {
-        const fn = `${String(ch.chapterNum).padStart(2, "0")}-${ch.slug}.md`;
-        downloadFile(fn, refreshYaml(ch, book));
+        const fn = smartFilename("chapter", { chapterNum: ch.chapterNum, slug: ch.slug });
+        saveFile(fn, refreshYaml(ch, book), { forceFallback: true });
       }, i * 200);
     });
     if (sorted.length > 0) {
       setTimeout(() => {
-        downloadFile("00-index.md", buildIndexFile(sorted, book));
+        saveFile(smartFilename("index"), buildIndexFile(sorted, book), { forceFallback: true });
       }, sorted.length * 200);
     }
   };
@@ -1018,7 +1001,7 @@ function DownloadBar({ chapters, book, converting }) {
         style={{ ...secondaryBtnStyle, opacity: done.length === 0 ? 0.5 : 1 }}
         onClick={() => {
           const combined = generateCombinedMarkdown(chapters, book);
-          downloadFile("00-complete-book.md", combined);
+          saveFile(smartFilename("combined"), combined);
         }}
         disabled={done.length === 0}
       >
@@ -1722,7 +1705,7 @@ export default function RAGConverter() {
               <span style={{ fontFamily: "var(--font-mono)", fontSize: 13, flex: 1, color: "var(--text)" }}>00-index.md</span>
               <span style={{ fontSize: 12, color: "var(--muted)", fontFamily: "var(--font-body)" }}>Index</span>
               <button style={linkBtnStyle} onClick={() => setPreview({ name: "00-index.md", content: indexContent })}>Preview</button>
-              <button style={linkBtnStyle} onClick={() => downloadFile("00-index.md", indexContent)}>&#11015;</button>
+              <button style={linkBtnStyle} onClick={() => saveFile(smartFilename("index"), indexContent)}>&#11015;</button>
             </div>
           )}
 
@@ -1745,8 +1728,8 @@ export default function RAGConverter() {
                 setPreview({ name: fn, content: refreshYaml(ch, book) });
               }}
               onDownload={ch => {
-                const fn = `${String(ch.chapterNum).padStart(2, "0")}-${ch.slug}.md`;
-                downloadFile(fn, refreshYaml(ch, book));
+                const fn = smartFilename("chapter", { chapterNum: ch.chapterNum, slug: ch.slug });
+                saveFile(fn, refreshYaml(ch, book));
               }}
             />
           ))}
