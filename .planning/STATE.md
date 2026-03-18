@@ -5,7 +5,7 @@ milestone_name: milestone
 status: verifying
 stopped_at: "quick task 260318-cpt — awaiting checkpoint:human-verify (Task 3)"
 last_updated: "2026-03-18T14:25:03.026Z"
-last_activity: 2026-03-17 — Completed plan 02-02 visual verification; Phase 2 done
+last_activity: 2026-03-18 - Completed quick task 260318-cpt: Smart file save with location picker and auto-naming
 progress:
   total_phases: 4
   completed_phases: 2
@@ -93,6 +93,12 @@ None yet.
 
 - [Phase 1]: Verify actual source file sizes before finalizing the 5 MB size gate (metadata in IDB vs. blobs server-side). If files are consistently under 5 MB, server dependency for file storage may be eliminated.
 - [RESOLVED - 01-01]: The project.json schema v1 fields validated against App.jsx state shape — projectSerializer.js written and tested.
+
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 260318-cpt | Smart file save with location picker and auto-naming | 2026-03-18 | 135a1e5 | [260318-cpt-smart-file-save-with-location-picker-and](./quick/260318-cpt-smart-file-save-with-location-picker-and/) |
 
 ## Session Continuity
 
