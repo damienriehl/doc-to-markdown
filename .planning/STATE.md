@@ -5,7 +5,7 @@ milestone_name: milestone
 status: verifying
 stopped_at: "quick task 260318-cpt — awaiting checkpoint:human-verify (Task 3)"
 last_updated: "2026-03-18T14:25:03.026Z"
-last_activity: 2026-03-18 - Completed quick task 260318-cpt: Smart file save with location picker and auto-naming
+last_activity: 2026-03-18 - Completed quick task 260318-dus: Strip binary image embeds from all conversion pipelines
 progress:
   total_phases: 4
   completed_phases: 2
