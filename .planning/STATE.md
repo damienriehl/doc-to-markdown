@@ -99,9 +99,10 @@ None yet.
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
 | 260318-cpt | Smart file save with location picker and auto-naming | 2026-03-18 | 135a1e5 | [260318-cpt-smart-file-save-with-location-picker-and](./quick/260318-cpt-smart-file-save-with-location-picker-and/) |
+| 260318-dus | Strip binary image embeds from all conversion pipelines | 2026-03-18 | 1f43762 | [260318-dus-bug-strip-non-textual-binary-content-ima](./quick/260318-dus-bug-strip-non-textual-binary-content-ima/) |
 
 ## Session Continuity
 
-Last session: 2026-03-18T14:25:03.025Z
-Stopped at: quick task 260318-cpt — awaiting checkpoint:human-verify (Task 3)
+Last session: 2026-03-18T16:51:01Z
+Stopped at: Completed quick task 260318-dus — strip binary image embeds from all conversion pipelines
 Resume file: None
