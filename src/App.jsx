@@ -621,6 +621,7 @@ function UploadZone({ onFiles, onSkipped, onError, onResolving, compact }) {
   const handleDrop = useCallback(
     async (e) => {
       e.preventDefault();
+      e.stopPropagation(); // Prevent page-level drop handler from also processing these files
       if (!e.dataTransfer.types.includes("Files")) return;
       setDragOver(false);
       // Use webkitGetAsEntry for folder support (must capture entries synchronously)
