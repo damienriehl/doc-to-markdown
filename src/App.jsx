@@ -7,6 +7,7 @@ import { isServerAvailable, convertViaServer } from "./serverApi.js";
 import { useProjectStore } from "./useProjectStore.js";
 import { ProjectList } from "./ProjectList.jsx";
 import { saveFile, saveBlob, smartFilename } from "./fileSaver.js";
+import { stripImageEmbeds } from "./stripImages.js";
 
 // ─── Chapter Number Inference ────────────────────────────────────────────────
 
@@ -181,6 +182,10 @@ function htmlToMarkdown(html) {
       case "img": {
         const alt = node.getAttribute("alt") || "";
         const src = node.getAttribute("src") || "";
+        // Strip binary content (base64 data URIs, media/ refs) — useless for RAG
+        if (/^data:|^media\//i.test(src)) {
+          return alt.trim() ? `[Image: ${alt.trim()}]` : "[Image removed]";
+        }
         return `![${alt}](${src})`;
       }
       case "sup": return `^${children}^`;
@@ -221,6 +226,8 @@ function cleanMarkdown(text) {
   t = t.replace(/([^\n])\n(#{1,6}\s)/g, "$1\n\n$2");
   // Replace tabs with spaces in heading lines
   t = t.replace(/^(#{1,6}\s.*)$/gm, line => line.replace(/\t/g, " "));
+  // Strip base64 data URI embeds and Pandoc media/ references (belt-and-suspenders for server-converted output)
+  t = stripImageEmbeds(t);
   return t.trim() + "\n";
 }
 
