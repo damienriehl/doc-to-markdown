@@ -37,6 +37,7 @@ import {
   renameProjectOnServer,
   deleteProjectOnServer,
 } from "./serverApi.js";
+import { saveBlob, smartFilename } from "./fileSaver.js";
 
 /**
  * Fire-and-forget — calls a promise without awaiting, catches errors silently.
@@ -44,6 +45,245 @@ import {
  */
 function fireAndForget(promise) {
   promise.catch(e => console.warn("[server sync]", e));
+}
+
+// --- buildIndexContent -------------------------------------------------------
+
+/**
+ * Build the 00-index.md content from a list of converted chapters.
+ * Replicates App.jsx buildIndexFile logic as a standalone helper.
+ *
+ * @param {Array<object>} chapters - Chapters with markdownContent
+ * @param {{ title: string, author: string }} book
+ * @returns {string} Index Markdown content
+ */
+function buildIndexContent(chapters, book) {
+  const sorted = [...chapters].sort((a, b) => a.chapterNum - b.chapterNum);
+  const lines = [
+    "---",
+    `title: "Index and Cross-Reference Guide"`,
+    `chapter: 0`,
+    `book: "${book?.title ?? ""}"`,
+    `author: "${book?.author ?? ""}"`,
+    `topics:`,
+    `  - "index"`,
+    `  - "cross-reference"`,
+    `  - "table of contents"`,
+    `  - "overview"`,
+    `converted_date: "${new Date().toISOString().split("T")[0]}"`,
+    "---", "",
+    `# ${book?.title ?? ""}: Index and Cross-Reference Guide`, "",
+    `*${book?.author ?? ""}*`, "",
+    "## Chapter Overview", "",
+    "| Chapter | Title | Key Topics |",
+    "|---------|-------|------------|",
+  ];
+  sorted.forEach(ch => {
+    const fn = `${String(ch.chapterNum).padStart(2, "0")}-${ch.slug}.md`;
+    const topics = (ch.topics ?? []).slice(0, 4).join(", ");
+    lines.push(`| ${ch.chapterNum} | ${ch.title} (\`${fn}\`) | ${topics} |`);
+  });
+  lines.push("", "## Chapter Summaries", "");
+  sorted.forEach(ch => {
+    lines.push(`### Chapter ${ch.chapterNum}: ${ch.title}`, "");
+    if (ch.topics?.length) lines.push(`This chapter covers: ${ch.topics.join(", ")}.`, "");
+    if (ch.keyTerms?.length) lines.push(`Key terms: ${ch.keyTerms.join(", ")}.`, "");
+  });
+  lines.push("## Master Key Terms Index", "");
+  const allTerms = {};
+  sorted.forEach(ch => {
+    (ch.keyTerms ?? []).forEach(t => {
+      if (!allTerms[t]) allTerms[t] = [];
+      allTerms[t].push(ch.chapterNum);
+    });
+  });
+  Object.keys(allTerms).sort().forEach(term => {
+    const refs = allTerms[term].map(n => `Ch. ${n}`).join(", ");
+    lines.push(`- **${term}**: ${refs}`);
+  });
+  lines.push("");
+  return lines.join("\n");
+}
+
+// --- exportProject -----------------------------------------------------------
+
+/**
+ * Export a project as a ZIP archive.
+ *
+ * @param {string} id - Project UUID
+ * @param {"full"|"outputs-only"} mode - Export mode
+ * @returns {Promise<void>}
+ */
+export async function exportProject(id, mode) {
+  const JSZip = (await import("jszip")).default;
+  const zip = new JSZip();
+
+  const record = await getProject(id);
+  if (!record) throw new Error("Project not found");
+
+  const doneChapters = (record.chapters ?? []).filter(
+    ch => ch.markdownContent && ch.markdownContent.trim() !== ""
+  );
+
+  if (mode === "full") {
+    // project.json at root
+    zip.file("project.json", JSON.stringify(record, null, 2));
+
+    // sources/ — original uploaded files as blobs from IDB
+    const blobMap = await getFiles(id);
+    const sourcesFolder = zip.folder("sources");
+    for (const chapter of record.chapters ?? []) {
+      const file = blobMap.get(chapter.blobId);
+      if (file) {
+        const ab = await file.arrayBuffer();
+        sourcesFolder.file(chapter.fileName, ab);
+      }
+    }
+
+    // outputs/ — generated Markdown
+    if (doneChapters.length > 0) {
+      const outputsFolder = zip.folder("outputs");
+      for (const ch of doneChapters) {
+        const fn = `${String(ch.chapterNum).padStart(2, "0")}-${ch.slug}.md`;
+        outputsFolder.file(fn, ch.markdownContent);
+      }
+      // 00-index.md in outputs/
+      outputsFolder.file("00-index.md", buildIndexContent(doneChapters, record.book));
+    }
+
+  } else {
+    // "outputs-only": flat ZIP with .md files
+    if (doneChapters.length === 0) {
+      throw new Error("No converted outputs to export. Convert files first.");
+    }
+    for (const ch of doneChapters) {
+      const fn = `${String(ch.chapterNum).padStart(2, "0")}-${ch.slug}.md`;
+      zip.file(fn, ch.markdownContent);
+    }
+    // 00-index.md at root
+    zip.file("00-index.md", buildIndexContent(doneChapters, record.book));
+  }
+
+  const blob = await zip.generateAsync({ type: "blob" });
+  const filename = smartFilename("zip", { bookTitle: record.book?.title || record.name });
+  await saveBlob(filename, blob);
+}
+
+// --- importProject -----------------------------------------------------------
+
+/**
+ * Import a project from a ZIP archive file.
+ *
+ * @param {File} file - ZIP file
+ * @param {Function} [setProjectList] - State setter for project list refresh (optional — tests omit it)
+ * @param {Function} [setServerConnected] - State setter for server status (optional — tests omit it)
+ * @returns {Promise<string>} The new project ID
+ */
+export async function importProject(file, setProjectList, setServerConnected) {
+  const JSZip = (await import("jszip")).default;
+  const buf = await file.arrayBuffer();
+  const zip = await JSZip.loadAsync(buf);
+
+  // Filter out __MACOSX and dot-prefixed entries
+  const validEntries = Object.keys(zip.files).filter(
+    name => !name.startsWith("__MACOSX/") && !name.split("/").some(part => part.startsWith("."))
+  );
+
+  const hasProjectJson = validEntries.includes("project.json");
+  const mdFiles = validEntries.filter(
+    name => !zip.files[name].dir && name.endsWith(".md")
+  );
+
+  if (!hasProjectJson && mdFiles.length === 0) {
+    throw new Error("Unrecognized ZIP format: expected project.json or .md files.");
+  }
+
+  // --- Parse project record ---
+  let projectRecord;
+  if (hasProjectJson) {
+    const raw = await zip.files["project.json"].async("string");
+    projectRecord = JSON.parse(raw);
+  } else {
+    // Outputs-only ZIP: construct minimal projectRecord from .md filenames
+    const zipName = file.name.replace(/\.zip$/i, "") || "Imported Project";
+    const chapters = [];
+    for (const path of mdFiles) {
+      const basename = path.split("/").pop();
+      if (basename === "00-index.md") continue; // skip index
+      const match = basename.match(/^(\d+)-(.+)\.md$/);
+      if (match) {
+        chapters.push({
+          id: crypto.randomUUID(),
+          blobId: crypto.randomUUID(),
+          fileName: basename,
+          fileType: "md",
+          title: match[2].replace(/-/g, " ").replace(/\b\w/g, c => c.toUpperCase()),
+          slug: match[2],
+          chapterNum: parseInt(match[1], 10),
+          topics: [],
+          keyTerms: [],
+          markdownContent: await zip.files[path].async("string"),
+          status: "done",
+        });
+      }
+    }
+    projectRecord = {
+      id: crypto.randomUUID(), // will be overwritten below
+      name: zipName,
+      version: 1,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      book: { title: "", author: "" },
+      chapters,
+      uiState: {},
+    };
+  }
+
+  // --- Assign new UUID (always fresh, never overwrite) ---
+  const newId = crypto.randomUUID();
+  projectRecord = { ...projectRecord, id: newId, updatedAt: new Date().toISOString() };
+
+  // --- Name collision resolution ---
+  const existingProjects = await listProjects();
+  const existingNames = new Set(existingProjects.map(p => p.name));
+  let finalName = projectRecord.name;
+  if (existingNames.has(finalName)) {
+    let counter = 2;
+    while (existingNames.has(`${projectRecord.name} (${counter})`)) counter++;
+    finalName = `${projectRecord.name} (${counter})`;
+  }
+  projectRecord.name = finalName;
+
+  // --- Write to IDB ---
+  await putProject(projectRecord);
+
+  // --- Write source blobs (full project ZIPs only) ---
+  const blobs = [];
+  for (const chapter of projectRecord.chapters ?? []) {
+    const path = `sources/${chapter.fileName}`;
+    if (zip.files[path]) {
+      const blobData = await zip.files[path].async("blob");
+      const fileObj = new File([blobData], chapter.fileName);
+      blobs.push({ id: chapter.blobId, file: fileObj, name: chapter.fileName });
+    }
+  }
+  if (blobs.length > 0) await putFiles(newId, blobs);
+
+  // --- Fire-and-forget server sync ---
+  fireAndForget(
+    isServerAvailable().then(up => {
+      if (setServerConnected) setServerConnected(up);
+      if (up) return saveProjectToServer(slugify(projectRecord.name), projectRecord);
+    })
+  );
+
+  // --- Refresh project list ---
+  if (setProjectList) {
+    const list = await listProjects();
+    setProjectList(list);
+  }
+
+  return newId;
 }
 
 // --- Exported helper (also used internally) ---------------------------------
@@ -88,6 +328,8 @@ export function buildSnapshot(book, chapters) {
  *   confirmSwitch: Function,
  *   cancelSwitch: Function,
  *   newProject: Function,
+ *   exportProject: Function,
+ *   importProject: Function,
  * }}
  */
 export function useProjectStore() {
@@ -370,6 +612,18 @@ export function useProjectStore() {
     setSaveStatus("saved");
   }, []);
 
+  // --- exportProject (hook wrapper) -----------------------------------------
+
+  const handleExport = useCallback(async (id, mode) => {
+    return exportProject(id, mode);
+  }, []);
+
+  // --- importProject (hook wrapper) -----------------------------------------
+
+  const handleImport = useCallback(async (file) => {
+    return importProject(file, setProjectList, setServerConnected);
+  }, []);
+
   // --- Return ---------------------------------------------------------------
 
   return {
@@ -392,5 +646,7 @@ export function useProjectStore() {
     newProject,
     renameProject,
     deleteProject: handleDeleteProject,
+    exportProject: handleExport,
+    importProject: handleImport,
   };
 }
