@@ -15,7 +15,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 1: Storage Foundation** - IndexedDB schema, serializer, and CRUD layer — no UI (completed 2026-03-17)
 - [x] **Phase 2: Core Save / Load / Switch** - React hook, App.jsx lift, project list, save-state indicator, unsaved-changes guard (completed 2026-03-17)
 - [x] **Phase 3: Project Management + Server Persistence** - Rename, delete w/ confirmation, FastAPI project routes, dual-store save (completed 2026-04-04)
-- [ ] **Phase 4: Export / Import** - ZIP export (full + outputs-only), ZIP import, export/import UI
+- [x] **Phase 4: Export / Import** - ZIP export (full + outputs-only), ZIP import, export/import UI (completed 2026-04-04)
 
 ## Phase Details
 
@@ -74,11 +74,11 @@ Plans:
   1. User can export a project as a ZIP file downloaded to their machine; the ZIP contains at minimum all generated Markdown outputs
   2. User can choose "full project" export mode to include source files in the ZIP alongside outputs and settings
   3. User can import a project from a ZIP archive; the imported project appears in the project list and can be opened immediately
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 
 Plans:
 - [x] 04-01-PLAN.md — Implement exportProject and importProject logic in useProjectStore.js with comprehensive TDD tests
-- [ ] 04-02-PLAN.md — Add export dropdown and import button to ProjectList.jsx UI, wire through App.jsx
+- [x] 04-02-PLAN.md — Add export dropdown and import button to ProjectList.jsx UI, wire through App.jsx
 
 ## Progress
 
@@ -90,4 +90,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 | 1. Storage Foundation | 2/2 | Complete   | 2026-03-17 |
 | 2. Core Save / Load / Switch | 2/2 | Complete   | 2026-03-17 |
 | 3. Project Management + Server Persistence | 2/2 | Complete   | 2026-04-04 |
-| 4. Export / Import | 1/2 | In Progress|  |
+| 4. Export / Import | 2/2 | Complete   | 2026-04-04 |
