@@ -15,8 +15,8 @@
 ### Project Management
 
 - [x] **PROJ-01**: User can see a list of all saved projects sorted by last modified date
-- [ ] **PROJ-02**: User can rename a saved project
-- [ ] **PROJ-03**: User can delete a saved project with a confirmation dialog
+- [x] **PROJ-02**: User can rename a saved project
+- [x] **PROJ-03**: User can delete a saved project with a confirmation dialog
 - [x] **PROJ-04**: Project list shows name, last-modified date, and file count for each project
 
 ### State Indicators
@@ -67,8 +67,8 @@
 | STOR-03 | Phase 1 | Complete |
 | STOR-04 | Phase 1 | Complete |
 | PROJ-01 | Phase 2 | Complete |
-| PROJ-02 | Phase 3 | Pending |
-| PROJ-03 | Phase 3 | Pending |
+| PROJ-02 | Phase 3 | Complete |
+| PROJ-03 | Phase 3 | Complete |
 | PROJ-04 | Phase 2 | Complete |
 | STAT-01 | Phase 2 | Complete |
 | STAT-02 | Phase 2 | Complete |

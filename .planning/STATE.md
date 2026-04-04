@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: verifying
-stopped_at: "quick task 260318-cpt — awaiting checkpoint:human-verify (Task 3)"
-last_updated: "2026-03-18T14:25:03.026Z"
-last_activity: 2026-03-18 - Completed quick task 260318-dus: Strip binary image embeds from all conversion pipelines
+status: executing
+stopped_at: Completed 03-01-PLAN.md — awaiting human verify checkpoint (Task 3)
+last_updated: "2026-04-04T01:57:04.791Z"
+last_activity: 2026-04-04
 progress:
   total_phases: 4
   completed_phases: 2
   total_plans: 6
-  completed_plans: 4
+  completed_plans: 5
   percent: 50
 ---
 
@@ -21,20 +21,21 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-17)
 
 **Core value:** Users can switch between 5-15 book projects instantly, with full state restoration — files, settings, outputs, and UI — so they never lose work or repeat setup.
-**Current focus:** Phase 3 — Project Management + Server Persistence
+**Current focus:** Phase 03 — project-management-server-persistence
 
 ## Current Position
 
-Phase: 2 of 4 (Core Save/Load/Switch) — COMPLETE
-Plan: 2 of 2 in phase 2 — COMPLETE (visual verification approved 2026-03-17)
-Status: Phase 2 fully complete; all 12 browser verification checks passed. Ready to begin Phase 3.
-Last activity: 2026-03-17 — Completed plan 02-02 visual verification; Phase 2 done
+Phase: 03 (project-management-server-persistence) — EXECUTING
+Plan: 2 of 2
+Status: Ready to execute
+Last activity: 2026-04-04
 
 Progress: [████████░░] 50%
 
 ## Performance Metrics
 
 **Velocity:**
+
 - Total plans completed: 2
 - Average duration: 3 min
 - Total execution time: 0.10 hours
@@ -47,6 +48,7 @@ Progress: [████████░░] 50%
 | 02-core-save-load-switch | 2/2 | 5 min | 2.5 min |
 
 **Recent Trend:**
+
 - Last 5 plans: 01-01 (2 min), 01-02 (4 min), 02-01 (3 min)
 - Trend: stable
 
@@ -55,6 +57,7 @@ Progress: [████████░░] 50%
 | Phase 01-storage-foundation P02 | 4 | 3 commits | 4 files |
 | Phase 02-core-save-load-switch P01 | 3 | 1 task (TDD) | 2 files |
 | Phase 02-core-save-load-switch P02 | 2 | 2 tasks | 2 files |
+| Phase 03-project-management-server-persistence P01 | 5 | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -84,6 +87,10 @@ Recent decisions affecting current work:
 - [Phase 02-02]: showSwitchConfirm stores pendingId string (not boolean) — null = closed, non-null = modal open, future-proofs for displaying target project name
 - [Phase 02-02]: Boot gate as early return (not conditional JSX) — prevents refs/effects running on partially-hydrated state
 - [Phase 02-02]: ProjectList collapsed by default — progressive disclosure, reduces visual noise during conversion work
+- [Phase 03-project-management-server-persistence]: cancelledRef.current=true on Escape prevents onBlur from confirming inline rename
+- [Phase 03-project-management-server-persistence]: renameProject is optimistic (in-memory update first) for instant UI feedback
+- [Phase 03-project-management-server-persistence]: deleteProject uses listProjects() refresh (not optimistic filter) for IDB-state consistency
+- [Phase 03-project-management-server-persistence]: Server status dot checked once at boot via isServerAvailable() — no polling
 
 ### Pending Todos
 
@@ -103,6 +110,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-18T16:51:01Z
-Stopped at: Completed quick task 260318-dus — strip binary image embeds from all conversion pipelines
+Last session: 2026-04-04T01:57:04.790Z
+Stopped at: Completed 03-01-PLAN.md — awaiting human verify checkpoint (Task 3)
 Resume file: None

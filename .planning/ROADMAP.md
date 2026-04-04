@@ -60,10 +60,10 @@ Plans:
   2. User can delete a project; a confirmation dialog appears before deletion and the project is removed from the list afterward
   3. When the local FastAPI server is running, saving a project also writes `./projects/<name>/project.json` and source files to disk
   4. Server unavailability never blocks or fails an IndexedDB save — the UI save path succeeds independently
-**Plans:** 2 plans
+**Plans:** 1/2 plans executed
 
 Plans:
-- [ ] 03-01-PLAN.md — Add rename/delete to ProjectList (hover icons, inline rename, delete modal), wire through useProjectStore to IndexedDB, add server status dot
+- [x] 03-01-PLAN.md — Add rename/delete to ProjectList (hover icons, inline rename, delete modal), wire through useProjectStore to IndexedDB, add server status dot
 - [ ] 03-02-PLAN.md — Add FastAPI /projects/* endpoints, extend serverApi.js with project client functions, wire fire-and-forget server sync into useProjectStore
 
 ### Phase 4: Export / Import
@@ -89,5 +89,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 |-------|----------------|--------|-----------|
 | 1. Storage Foundation | 2/2 | Complete   | 2026-03-17 |
 | 2. Core Save / Load / Switch | 2/2 | Complete   | 2026-03-17 |
-| 3. Project Management + Server Persistence | 0/2 | In progress | - |
+| 3. Project Management + Server Persistence | 1/2 | In Progress|  |
 | 4. Export / Import | 0/2 | Not started | - |
