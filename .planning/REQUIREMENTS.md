@@ -26,8 +26,8 @@
 
 ### Export/Import
 
-- [ ] **EXPT-01**: User can export a project as a ZIP archive containing source files, outputs, and settings
-- [ ] **EXPT-02**: User can import a project from a ZIP archive, restoring it as a new saved project
+- [x] **EXPT-01**: User can export a project as a ZIP archive containing source files, outputs, and settings
+- [x] **EXPT-02**: User can import a project from a ZIP archive, restoring it as a new saved project
 
 ## v2 Requirements
 
@@ -72,8 +72,8 @@
 | PROJ-04 | Phase 2 | Complete |
 | STAT-01 | Phase 2 | Complete |
 | STAT-02 | Phase 2 | Complete |
-| EXPT-01 | Phase 4 | Pending |
-| EXPT-02 | Phase 4 | Pending |
+| EXPT-01 | Phase 4 | Complete |
+| EXPT-02 | Phase 4 | Complete |
 
 **Coverage:**
 - v1 requirements: 12 total

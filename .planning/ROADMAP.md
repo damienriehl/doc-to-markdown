@@ -74,10 +74,10 @@ Plans:
   1. User can export a project as a ZIP file downloaded to their machine; the ZIP contains at minimum all generated Markdown outputs
   2. User can choose "full project" export mode to include source files in the ZIP alongside outputs and settings
   3. User can import a project from a ZIP archive; the imported project appears in the project list and can be opened immediately
-**Plans:** 2 plans
+**Plans:** 1/2 plans executed
 
 Plans:
-- [ ] 04-01-PLAN.md — Implement exportProject and importProject logic in useProjectStore.js with comprehensive TDD tests
+- [x] 04-01-PLAN.md — Implement exportProject and importProject logic in useProjectStore.js with comprehensive TDD tests
 - [ ] 04-02-PLAN.md — Add export dropdown and import button to ProjectList.jsx UI, wire through App.jsx
 
 ## Progress
@@ -90,4 +90,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 | 1. Storage Foundation | 2/2 | Complete   | 2026-03-17 |
 | 2. Core Save / Load / Switch | 2/2 | Complete   | 2026-03-17 |
 | 3. Project Management + Server Persistence | 2/2 | Complete   | 2026-04-04 |
-| 4. Export / Import | 0/2 | Planned | - |
+| 4. Export / Import | 1/2 | In Progress|  |

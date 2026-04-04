@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: verifying
-stopped_at: Phase 4 context gathered
-last_updated: "2026-04-04T02:12:37.237Z"
+status: executing
+stopped_at: Completed 04-export-import plan 01
+last_updated: "2026-04-04T02:50:50.961Z"
 last_activity: 2026-04-04
 progress:
   total_phases: 4
   completed_phases: 3
-  total_plans: 6
-  completed_plans: 6
+  total_plans: 8
+  completed_plans: 7
   percent: 50
 ---
 
@@ -21,13 +21,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-17)
 
 **Core value:** Users can switch between 5-15 book projects instantly, with full state restoration — files, settings, outputs, and UI — so they never lose work or repeat setup.
-**Current focus:** Phase 03 — project-management-server-persistence
+**Current focus:** Phase 04 — export-import
 
 ## Current Position
 
-Phase: 4
-Plan: Not started
-Status: Phase complete — ready for verification
+Phase: 04 (export-import) — EXECUTING
+Plan: 2 of 2
+Status: Ready to execute
 Last activity: 2026-04-04
 
 Progress: [████████░░] 50%
@@ -59,6 +59,7 @@ Progress: [████████░░] 50%
 | Phase 02-core-save-load-switch P02 | 2 | 2 tasks | 2 files |
 | Phase 03-project-management-server-persistence P01 | 5 | 2 tasks | 6 files |
 | Phase 03-project-management-server-persistence P02 | 2 | 2 tasks | 4 files |
+| Phase 04-export-import P01 | 3 | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -95,6 +96,9 @@ Recent decisions affecting current work:
 - [Phase 03-project-management-server-persistence]: fireAndForget wraps isServerAvailable().then() — server check and sync bundled in one non-blocking promise chain
 - [Phase 03-project-management-server-persistence]: capture-before-mutate pattern in rename/delete: old name captured before IDB mutation for server sync
 - [Phase 03-project-management-server-persistence]: resolve_slug() with exclude_dir parameter makes rename to same slug a no-op rather than triggering collision suffix
+- [Phase 04-export-import]: exportProject and importProject exported as standalone functions for testability without React
+- [Phase 04-export-import]: Hook wrappers (handleExport, handleImport) bind state setters from hook closure — pure logic separated from React state
+- [Phase 04-export-import]: buildIndexContent extracted from App.jsx into useProjectStore.js module scope as canonical standalone version
 
 ### Pending Todos
 
@@ -114,6 +118,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-04T02:12:37.235Z
-Stopped at: Phase 4 context gathered
-Resume file: .planning/phases/04-export-import/04-CONTEXT.md
+Last session: 2026-04-04T02:50:50.959Z
+Stopped at: Completed 04-export-import plan 01
+Resume file: None
