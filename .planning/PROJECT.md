@@ -22,12 +22,17 @@ Users can switch between 5–15 book projects instantly, with full state restora
 
 ### Active
 
-- [ ] Save project to directory (./projects/<name>/) with source files, settings, outputs, and UI state
-- [ ] Load project from directory, restoring full workspace state including source files
-- [ ] Browser cache (IndexedDB) for instant loading alongside directory persistence
-- [ ] Project management UI: list, rename, delete saved projects
 - [ ] Export/import projects as portable archives for sharing
-- [ ] Manage 5–15 projects concurrently with clear switching UI
+
+### Validated (Phases 1–3)
+
+- ✓ IndexedDB persistence layer with project CRUD, blob storage, and quota handling — Phase 1
+- ✓ Save/load/switch projects with full state restoration (files, settings, outputs, UI) — Phase 2
+- ✓ Project management UI: rename (inline edit) and delete (with confirmation modal) — Phase 3
+- ✓ Server-side persistence via FastAPI `/projects/*` endpoints with fire-and-forget sync — Phase 3
+- ✓ Dual-store architecture: IndexedDB primary, server directory as transparent background durability — Phase 3
+- ✓ Server connectivity indicator (status dot) in header — Phase 3
+- ✓ Manage 5–15 projects concurrently with clear switching UI — Phase 2
 
 ### Out of Scope
 
@@ -57,10 +62,10 @@ The local FastAPI server (`server.py`) could be extended to handle project save/
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| Dual storage (directory + IndexedDB) | Directory for portability/sharing, IndexedDB for instant browser loading | — Pending |
-| Server endpoints for filesystem I/O | Browser can't write to directories; extend existing FastAPI server | — Pending |
-| User-initiated saves only | Simpler UX, avoids unexpected writes, reduces storage churn | — Pending |
-| Project directory inside repo | Keeps everything self-contained, easy to gitignore or share | — Pending |
+| Dual storage (directory + IndexedDB) | Directory for portability/sharing, IndexedDB for instant browser loading | ✓ Implemented Phase 3 |
+| Server endpoints for filesystem I/O | Browser can't write to directories; extend existing FastAPI server | ✓ Implemented Phase 3 |
+| User-initiated saves only | Simpler UX, avoids unexpected writes, reduces storage churn | ✓ Implemented Phase 2 |
+| Project directory inside repo | Keeps everything self-contained, easy to gitignore or share | ✓ Implemented Phase 3 |
 
 ---
-*Last updated: 2026-03-17 after initialization*
+*Last updated: 2026-04-03 after Phase 3 completion*
