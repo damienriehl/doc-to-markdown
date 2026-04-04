@@ -20,11 +20,7 @@ Users can switch between 5–15 book projects instantly, with full state restora
 - ✓ YAML front matter injection and post-processing pipeline — existing
 - ✓ Cross-reference index generation — existing
 
-### Active
-
-- [ ] Export/import projects as portable archives for sharing
-
-### Validated (Phases 1–3)
+### Validated (Phases 1–4)
 
 - ✓ IndexedDB persistence layer with project CRUD, blob storage, and quota handling — Phase 1
 - ✓ Save/load/switch projects with full state restoration (files, settings, outputs, UI) — Phase 2
@@ -33,6 +29,8 @@ Users can switch between 5–15 book projects instantly, with full state restora
 - ✓ Dual-store architecture: IndexedDB primary, server directory as transparent background durability — Phase 3
 - ✓ Server connectivity indicator (status dot) in header — Phase 3
 - ✓ Manage 5–15 projects concurrently with clear switching UI — Phase 2
+- ✓ Export projects as ZIP archives (full project or outputs-only modes) — Phase 4
+- ✓ Import projects from ZIP archives with validation and auto-rename on collision — Phase 4
 
 ### Out of Scope
 
@@ -68,4 +66,4 @@ The local FastAPI server (`server.py`) could be extended to handle project save/
 | Project directory inside repo | Keeps everything self-contained, easy to gitignore or share | ✓ Implemented Phase 3 |
 
 ---
-*Last updated: 2026-04-03 after Phase 3 completion*
+*Last updated: 2026-04-03 after Phase 4 completion — all v1 requirements complete*
