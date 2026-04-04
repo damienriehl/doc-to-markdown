@@ -30,7 +30,21 @@ import {
   renameProject as renameProjectInDb,
 } from "./projectDb.js";
 import { serializeProject, deserializeProject } from "./projectSerializer.js";
-import { isServerAvailable } from "./serverApi.js";
+import {
+  isServerAvailable,
+  slugify,
+  saveProjectToServer,
+  renameProjectOnServer,
+  deleteProjectOnServer,
+} from "./serverApi.js";
+
+/**
+ * Fire-and-forget — calls a promise without awaiting, catches errors silently.
+ * Used for non-blocking server persistence operations.
+ */
+function fireAndForget(promise) {
+  promise.catch(e => console.warn("[server sync]", e));
+}
 
 // --- Exported helper (also used internally) ---------------------------------
 
@@ -190,6 +204,14 @@ export function useProjectStore() {
         // re-rendered yet, but book/chapters captured via useCallback closure are current)
         savedSnapshotRef.current = buildSnapshot(book, chapters);
         setSaveStatus("saved");
+        // Fire-and-forget server sync
+        const slug = slugify(projectName);
+        fireAndForget(
+          isServerAvailable().then(up => {
+            setServerConnected(up);
+            if (up) return saveProjectToServer(slug, projectRecord);
+          })
+        );
         // Refresh project list
         const list = await listProjects();
         setProjectList(list);
@@ -210,16 +232,28 @@ export function useProjectStore() {
    * @param {string} newName - New project name
    */
   const renameProject = useCallback(async (id, newName) => {
+    // Capture old name before IDB update (needed for server rename)
+    const oldName = projectList.find(p => p.id === id)?.name || "untitled";
     await renameProjectInDb(id, newName);
     // Update in-memory list optimistically
     setProjectList(prev => prev.map(p =>
       p.id === id ? { ...p, name: newName, updatedAt: new Date().toISOString() } : p
     ));
-    // If renaming the active project, update activeProjectName
     if (id === activeProjectId) {
       setActiveProjectName(newName);
     }
-  }, [activeProjectId]);
+    // Fire-and-forget server rename
+    fireAndForget(
+      isServerAvailable().then(up => {
+        setServerConnected(up);
+        if (up) {
+          const oldSlug = slugify(oldName);
+          const newSlug = slugify(newName);
+          if (oldSlug !== newSlug) return renameProjectOnServer(oldSlug, newSlug);
+        }
+      })
+    );
+  }, [activeProjectId, projectList]);
 
   // --- deleteProject --------------------------------------------------------
 
@@ -229,6 +263,8 @@ export function useProjectStore() {
    * @param {string} id - Project UUID
    */
   const handleDeleteProject = useCallback(async (id) => {
+    // Capture name before IDB delete (needed for server delete)
+    const deletedName = projectList.find(p => p.id === id)?.name;
     await deleteProjectFromDb(id);
     const list = await listProjects();
     setProjectList(list);
@@ -242,7 +278,16 @@ export function useProjectStore() {
       setSaveStatus("saved");
       try { localStorage.removeItem("doc-to-markdown:lastProjectId"); } catch { /* ignore */ }
     }
-  }, [activeProjectId]);
+    // Fire-and-forget server delete
+    if (deletedName) {
+      fireAndForget(
+        isServerAvailable().then(up => {
+          setServerConnected(up);
+          if (up) return deleteProjectOnServer(slugify(deletedName));
+        })
+      );
+    }
+  }, [activeProjectId, projectList]);
 
   // --- load -----------------------------------------------------------------
 
