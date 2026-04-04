@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
-stopped_at: Completed 03-01-PLAN.md — awaiting human verify checkpoint (Task 3)
-last_updated: "2026-04-04T01:57:04.791Z"
+status: verifying
+stopped_at: Completed 03-02-PLAN.md
+last_updated: "2026-04-04T02:01:43.083Z"
 last_activity: 2026-04-04
 progress:
   total_phases: 4
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 6
-  completed_plans: 5
+  completed_plans: 6
   percent: 50
 ---
 
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-03-17)
 
 Phase: 03 (project-management-server-persistence) — EXECUTING
 Plan: 2 of 2
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-04-04
 
 Progress: [████████░░] 50%
@@ -58,6 +58,7 @@ Progress: [████████░░] 50%
 | Phase 02-core-save-load-switch P01 | 3 | 1 task (TDD) | 2 files |
 | Phase 02-core-save-load-switch P02 | 2 | 2 tasks | 2 files |
 | Phase 03-project-management-server-persistence P01 | 5 | 2 tasks | 6 files |
+| Phase 03-project-management-server-persistence P02 | 2 | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -91,6 +92,9 @@ Recent decisions affecting current work:
 - [Phase 03-project-management-server-persistence]: renameProject is optimistic (in-memory update first) for instant UI feedback
 - [Phase 03-project-management-server-persistence]: deleteProject uses listProjects() refresh (not optimistic filter) for IDB-state consistency
 - [Phase 03-project-management-server-persistence]: Server status dot checked once at boot via isServerAvailable() — no polling
+- [Phase 03-project-management-server-persistence]: fireAndForget wraps isServerAvailable().then() — server check and sync bundled in one non-blocking promise chain
+- [Phase 03-project-management-server-persistence]: capture-before-mutate pattern in rename/delete: old name captured before IDB mutation for server sync
+- [Phase 03-project-management-server-persistence]: resolve_slug() with exclude_dir parameter makes rename to same slug a no-op rather than triggering collision suffix
 
 ### Pending Todos
 
@@ -110,6 +114,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-04T01:57:04.790Z
-Stopped at: Completed 03-01-PLAN.md — awaiting human verify checkpoint (Task 3)
+Last session: 2026-04-04T02:01:43.081Z
+Stopped at: Completed 03-02-PLAN.md
 Resume file: None
