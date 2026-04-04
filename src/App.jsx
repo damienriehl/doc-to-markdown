@@ -1138,6 +1138,7 @@ export default function RAGConverter() {
     serverConnected,
     save, load, switchProject, confirmSwitch, cancelSwitch, newProject,
     renameProject, deleteProject,
+    exportProject: handleExportProject, importProject: handleImportProject,
   } = useProjectStore();
   const [converting, setConverting] = useState(false);
   const [preview, setPreview] = useState(null);
@@ -1563,6 +1564,8 @@ export default function RAGConverter() {
         onNew={newProject}
         onRename={renameProject}
         onDelete={deleteProject}
+        onExport={handleExportProject}
+        onImport={handleImportProject}
       />
 
       {/* Unsaved-changes confirmation modal */}
