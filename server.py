@@ -15,13 +15,15 @@ through it for higher quality results (Pandoc/Marker).
 """
 
 import argparse
+import json
 import os
 import re
+import shutil
 import sys
 import tempfile
 from pathlib import Path
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -38,11 +40,30 @@ app.add_middleware(
     ],
     allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$",
     allow_credentials=True,
-    allow_methods=["GET", "POST"],
+    allow_methods=["GET", "POST", "PUT", "DELETE"],
     allow_headers=["*"],
 )
 
 ALLOWED_EXTENSIONS = {".docx", ".pdf", ".rtf", ".odt", ".txt"}
+PROJECTS_DIR = Path("./projects")
+
+
+def slugify(name: str) -> str:
+    """Convert a project name to a filesystem-safe directory name."""
+    slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
+    return slug or "untitled"
+
+
+def resolve_slug(slug: str, exclude_dir: Path | None = None) -> str:
+    """Return a unique slug by appending -2, -3, etc. if the directory already exists."""
+    candidate = slug
+    counter = 2
+    while True:
+        target = PROJECTS_DIR / candidate
+        if not target.exists() or target == exclude_dir:
+            return candidate
+        candidate = f"{slug}-{counter}"
+        counter += 1
 
 
 def convert_buffer(contents: bytes, filename: str, pdf_engine: str = "marker") -> str:
@@ -139,6 +160,52 @@ async def convert_file(file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Conversion error: {e}")
+
+
+@app.post("/projects/{slug}")
+async def save_project(slug: str, metadata: str = Form(...)):
+    """Save project metadata to disk as project.json."""
+    try:
+        data = json.loads(metadata)
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="Invalid JSON in metadata field")
+
+    resolved = resolve_slug(slug)
+    project_dir = PROJECTS_DIR / resolved
+    project_dir.mkdir(parents=True, exist_ok=True)
+
+    project_file = project_dir / "project.json"
+    project_file.write_text(json.dumps(data, indent=2), encoding="utf-8")
+
+    return {"slug": resolved, "path": str(project_dir)}
+
+
+@app.put("/projects/{slug}/rename")
+async def rename_project(slug: str, new_slug: str = Form(...)):
+    """Rename a project directory."""
+    source = PROJECTS_DIR / slug
+    if not source.exists():
+        raise HTTPException(status_code=404, detail=f"Project directory not found: {slug}")
+
+    resolved = resolve_slug(new_slug, exclude_dir=source)
+    target = PROJECTS_DIR / resolved
+
+    if source != target:
+        source.rename(target)
+
+    return {"slug": resolved, "path": str(target)}
+
+
+@app.delete("/projects/{slug}")
+async def delete_project(slug: str):
+    """Delete a project directory recursively."""
+    project_dir = PROJECTS_DIR / slug
+    if not project_dir.exists():
+        # Already gone — idempotent
+        return {"deleted": True, "slug": slug}
+
+    shutil.rmtree(project_dir)
+    return {"deleted": True, "slug": slug}
 
 
 def main():
