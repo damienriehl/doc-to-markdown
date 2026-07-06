@@ -21,5 +21,6 @@
     "fake-indexeddb": "^6.2.5",
     "vite": "^6.0.0",
     "vitest": "^4.1.0"
-  }
+  },
+  "license": "MIT"
 }
