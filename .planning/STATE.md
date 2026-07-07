@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: verifying
-stopped_at: Completed 04-export-import plan 02 — Phase 4 complete
-last_updated: "2026-04-04T02:57:23.446Z"
-last_activity: 2026-04-04
+status: complete
+stopped_at: Phase 4 UAT complete (11/11 pass) — data-loss import bug found & fixed; milestone verified
+last_updated: "2026-07-07T12:40:00Z"
+last_activity: 2026-07-07
 progress:
   total_phases: 4
   completed_phases: 4
@@ -102,6 +102,7 @@ Recent decisions affecting current work:
 - [Phase 04-export-import]: buildIndexContent extracted from App.jsx into useProjectStore.js module scope as canonical standalone version
 - [Phase 04-export-import]: Export icon placed between rename and delete for contextual discovery on each card
 - [Phase 04-export-import]: Import section always visible (not hover-gated) — project-list-level action, not per-card
+- [Phase 04-UAT 2026-07-07]: importProject regenerates fresh blobId + chapter id per chapter on import. The `files` store is keyed by blobId, so reusing embedded blobIds re-parented (stole) existing projects' source blobs. Fix keeps every imported project independent; regression test = exportImport Test 11.
 
 ### Pending Todos
 

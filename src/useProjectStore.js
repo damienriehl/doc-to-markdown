@@ -239,9 +239,23 @@ export async function importProject(file, setProjectList, setServerConnected) {
     };
   }
 
-  // --- Assign new UUID (always fresh, never overwrite) ---
+  // --- Assign new UUIDs (always fresh, never overwrite) ---
+  // The project id AND every chapter blobId must be regenerated. The `files`
+  // store is keyed by blobId, so reusing the blobIds embedded in an imported
+  // project.json would make putFiles() overwrite an existing project's blob
+  // records and silently steal its source files (data loss). Fresh blobIds
+  // (and chapter ids) keep every imported project fully independent.
   const newId = crypto.randomUUID();
-  projectRecord = { ...projectRecord, id: newId, updatedAt: new Date().toISOString() };
+  projectRecord = {
+    ...projectRecord,
+    id: newId,
+    updatedAt: new Date().toISOString(),
+    chapters: (projectRecord.chapters ?? []).map((ch) => ({
+      ...ch,
+      id: crypto.randomUUID(),
+      blobId: crypto.randomUUID(),
+    })),
+  };
 
   // --- Name collision resolution ---
   const existingProjects = await listProjects();

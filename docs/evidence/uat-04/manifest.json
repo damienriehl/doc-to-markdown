@@ -1,0 +1,97 @@
+{
+  "pack_id": "D2M-UAT04",
+  "title": "doc-to-markdown — Phase 4 Export/Import UAT",
+  "repo": "D2M",
+  "campaign": "UAT04",
+  "rubric_version": "manual-uat-04-export-import",
+  "spend": "$0 (local Vite dev build, no paid APIs)",
+  "environment": "Vite dev @ localhost:9377, chrome-devtools MCP (isolated context browser-campaigns)",
+  "generated_at": "2026-07-07",
+  "counts": {
+    "pass": 10,
+    "borderline": 1
+  },
+  "total_findings": 11,
+  "sections": [
+    {
+      "id": "EP-D2M-UAT04-001",
+      "anchor": "ep-d2m-uat04-001-hover-reveals-rename-export-delete-icons",
+      "title": "Hover reveals rename / export / delete icons",
+      "status": "pass",
+      "context": "Hovering a non-active project card reveals all three action icons. Verified the action container computes opacity:1 and pointerEvents:auto on hover, and that rename/export/delete buttons are present."
+    },
+    {
+      "id": "EP-D2M-UAT04-002",
+      "anchor": "ep-d2m-uat04-002-export-dropdown-shows-two-modes-and-dismisses-on-outside-click",
+      "title": "Export dropdown shows two modes and dismisses on outside click",
+      "status": "pass",
+      "context": "Clicking the export icon opens a dropdown with 'Full project' and 'Outputs only'. A mousedown outside the dropdown dismisses it (confirmed after the React re-render)."
+    },
+    {
+      "id": "EP-D2M-UAT04-003",
+      "anchor": "ep-d2m-uat04-003-full-project-export-zip-structure",
+      "title": "Full-project export ZIP structure",
+      "status": "pass",
+      "context": "Full export produced a 3626-byte ZIP. Real-tool unzip confirms project.json at root, a sources/ folder with both original .txt files, and an outputs/ folder with both generated .md files plus 00-index.md.",
+      "output_sample": "project.json\nsources/01-jury-selection.txt\nsources/02-opening-statements.txt\noutputs/01-jury-selection.md\noutputs/02-opening-statements.md\noutputs/00-index.md"
+    },
+    {
+      "id": "EP-D2M-UAT04-004",
+      "anchor": "ep-d2m-uat04-004-outputs-only-export-is-flat-md-only",
+      "title": "Outputs-only export is flat .md-only",
+      "status": "pass",
+      "context": "Outputs-only export produced a 1423-byte ZIP containing only [01-jury-selection.md, 02-opening-statements.md, 00-index.md] at root. No folders, no project.json, no sources. (all_md_at_root=True, has_project_json=False, has_folders=False.)"
+    },
+    {
+      "id": "EP-D2M-UAT04-005",
+      "anchor": "ep-d2m-uat04-005-export-spinner-renders-during-processing",
+      "title": "Export spinner renders during processing",
+      "status": "pass",
+      "context": "A MutationObserver on the export button captured the spinner SVG (circle[stroke-dasharray] with animation:spin) appearing while the export ran, then reverting to the normal download icon on completion."
+    },
+    {
+      "id": "EP-D2M-UAT04-006",
+      "anchor": "ep-d2m-uat04-006-import-button-always-visible",
+      "title": "Import button always visible",
+      "status": "pass",
+      "context": "The 'Import project' button is rendered unconditionally in the expanded project list (not hover-gated). Present in every a11y snapshot."
+    },
+    {
+      "id": "EP-D2M-UAT04-007",
+      "anchor": "ep-d2m-uat04-007-import-from-zip-creates-a-new-project-original-name",
+      "title": "Import from ZIP creates a new project (original name)",
+      "status": "pass",
+      "context": "Feeding a non-colliding full ZIP through the real hidden file input (change event) created 'Trialbook Imported' with its original name, 2 chapters, 2 restored outputs, and restored source blobs."
+    },
+    {
+      "id": "EP-D2M-UAT04-008",
+      "anchor": "ep-d2m-uat04-008-name-collision-auto-rename",
+      "title": "Name-collision auto-rename",
+      "status": "pass",
+      "context": "Importing a ZIP whose project name matches an existing project appends ' (2)', then ' (3)' on a second import — no overwrite, no prompt. Original project retained."
+    },
+    {
+      "id": "EP-D2M-UAT04-009",
+      "anchor": "ep-d2m-uat04-009-import-status-feedback",
+      "title": "Import status feedback",
+      "status": "pass",
+      "context": "Captured status transitions during import: 'Importing...' (muted) then 'Project imported successfully.' in green (#10b981, rgb(16,185,129)), auto-clearing. Error path renders red (Test 10)."
+    },
+    {
+      "id": "EP-D2M-UAT04-010",
+      "anchor": "ep-d2m-uat04-010-invalid-file-rejection",
+      "title": "Invalid-file rejection",
+      "status": "borderline",
+      "context": "Both invalid inputs are rejected in red with no project created: (a) a non-ZIP file, and (b) a ZIP with only readme.txt -> 'Unrecognized ZIP format: expected project.json or .md files.' BORDERLINE: the non-ZIP case surfaces JSZip's raw internal message ('Can't find end of central directory : is this a zip file ? If it is, see https://...'), which is developer-facing. Functionally correct; recommend a friendlier message. Logged as a non-blocking follow-up.",
+      "output_sample": "non-ZIP -> \"Can't find end of central directory : is this a zip file ? ...\" (red, no project)\nbad ZIP -> \"Unrecognized ZIP format: expected project.json or .md files.\" (red, no project)"
+    },
+    {
+      "id": "EP-D2M-UAT04-011",
+      "anchor": "ep-d2m-uat04-011-export-import-round-trip-is-byte-identical-after-data-loss-fix",
+      "title": "Export → import round-trip is byte-identical (after data-loss fix)",
+      "status": "pass",
+      "context": "Round-trip verified by byte-compare: re-exporting the imported copy produced sources/* and outputs/* byte-identical to the original export (all 5 payload files), and project.json content-equal ignoring volatile id/name/timestamps/blobIds. DATA-LOSS BUG FOUND & FIXED: importProject reused the chapter blobIds embedded in project.json. The IndexedDB `files` store is keyed by blobId, so importing a project whose blobIds already existed overwrote (re-parented) the existing blob records, silently deleting the original project's source files. Confirmed live: both the original and first import ended …",
+      "output_sample": "byte-equal outputs/00-index.md: True (805 vs 805)\nbyte-equal outputs/01-jury-selection.md: True (132)\nbyte-equal outputs/02-opening-statements.md: True (126)\nbyte-equal sources/01-jury-selection.txt: True (70)\nbyte-equal sources/02-opening-statements.txt: True (56)\nALL sources+outputs byte-identical: True"
+    }
+  ]
+}

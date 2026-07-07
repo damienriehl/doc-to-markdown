@@ -416,4 +416,44 @@ describe("importProject", () => {
     const fileMap = await getFiles(newId);
     expect(fileMap.size).toBe(1);
   });
+
+  it("Test 11 (blobId isolation): re-importing an export must not steal the original's source blobs", async () => {
+    // Regression: the `files` store is keyed by blobId. importProject used to
+    // reuse the blobIds embedded in project.json, so importing a project whose
+    // blobIds already existed in the DB overwrote (re-parented) the original
+    // project's blob records — silently deleting its source files.
+    const chapter = makeChapter({
+      id: "ch-1",
+      blobId: crypto.randomUUID(),
+      file: fakeFile("ch01.docx", "the-original-source-bytes"),
+      fileName: "ch01.docx",
+      title: "Chapter 1",
+      slug: "chapter-1",
+      chapterNum: 1,
+      markdownContent: "# Chapter 1\n\nContent.",
+      status: "done",
+    });
+    const originalId = await seedProject("My Book", [chapter]);
+
+    // Export, then import the SAME zip back into the SAME db (collision path)
+    await exportProject(originalId, "full");
+    const zipFile = new File([capturedBlob], "my-book.zip", { type: "application/zip" });
+    const importedId = await importProject(zipFile);
+
+    // Imported project got a fresh id and fresh, distinct blobIds
+    expect(importedId).not.toBe(originalId);
+    const origRecord = await getProject(originalId);
+    const impRecord = await getProject(importedId);
+    expect(impRecord.chapters[0].blobId).not.toBe(origRecord.chapters[0].blobId);
+
+    // BOTH projects still own their source blob — nothing was stolen
+    const origFiles = await getFiles(originalId);
+    const impFiles = await getFiles(importedId);
+    expect(origFiles.size).toBe(1);
+    expect(impFiles.size).toBe(1);
+
+    // And the bytes round-trip intact for the imported copy
+    const impFile = [...impFiles.values()][0];
+    expect(await impFile.text()).toBe("the-original-source-bytes");
+  });
 });

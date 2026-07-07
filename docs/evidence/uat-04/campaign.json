@@ -1,0 +1,85 @@
+{
+  "repo": "D2M",
+  "campaign": "UAT04",
+  "title": "doc-to-markdown — Phase 4 Export/Import UAT",
+  "campaign_label": "doc-to-markdown · Phase 4 Export/Import",
+  "description": "Browser-driven execution of the 10 pending manual UAT cases for the export/import feature (export dropdown, full + outputs-only ZIP, spinner, import round-trip, name-collision auto-rename, status feedback, invalid-file rejection). ZIP round-trips verified by real-tool byte-compare. A data-loss import bug was found and fixed mid-campaign.",
+  "rubric_version": "manual-uat-04-export-import",
+  "spend": "$0 (local Vite dev build, no paid APIs)",
+  "environment": "Vite dev @ localhost:9377, chrome-devtools MCP (isolated context browser-campaigns)",
+  "sections": [
+    {
+      "id_num": 1,
+      "title": "Hover reveals rename / export / delete icons",
+      "status": "pass",
+      "body": "Hovering a non-active project card reveals all three action icons. Verified the action container computes opacity:1 and pointerEvents:auto on hover, and that rename/export/delete buttons are present.",
+      "screenshots": [{"path": "shots/01-hover-icons.jpg", "caption": "Trialbook Alpha hovered — 3 icons visible; Import button always shown (Test 6)"}]
+    },
+    {
+      "id_num": 2,
+      "title": "Export dropdown shows two modes and dismisses on outside click",
+      "status": "pass",
+      "body": "Clicking the export icon opens a dropdown with 'Full project' and 'Outputs only'. A mousedown outside the dropdown dismisses it (confirmed after the React re-render).",
+      "screenshots": [{"path": "shots/02-export-dropdown.jpg", "caption": "Export dropdown with both modes"}]
+    },
+    {
+      "id_num": 3,
+      "title": "Full-project export ZIP structure",
+      "status": "pass",
+      "body": "Full export produced a 3626-byte ZIP. Real-tool unzip confirms project.json at root, a sources/ folder with both original .txt files, and an outputs/ folder with both generated .md files plus 00-index.md.",
+      "output_sample": "project.json\nsources/01-jury-selection.txt\nsources/02-opening-statements.txt\noutputs/01-jury-selection.md\noutputs/02-opening-statements.md\noutputs/00-index.md"
+    },
+    {
+      "id_num": 4,
+      "title": "Outputs-only export is flat .md-only",
+      "status": "pass",
+      "body": "Outputs-only export produced a 1423-byte ZIP containing only [01-jury-selection.md, 02-opening-statements.md, 00-index.md] at root. No folders, no project.json, no sources. (all_md_at_root=True, has_project_json=False, has_folders=False.)"
+    },
+    {
+      "id_num": 5,
+      "title": "Export spinner renders during processing",
+      "status": "pass",
+      "body": "A MutationObserver on the export button captured the spinner SVG (circle[stroke-dasharray] with animation:spin) appearing while the export ran, then reverting to the normal download icon on completion."
+    },
+    {
+      "id_num": 6,
+      "title": "Import button always visible",
+      "status": "pass",
+      "body": "The 'Import project' button is rendered unconditionally in the expanded project list (not hover-gated). Present in every a11y snapshot."
+    },
+    {
+      "id_num": 7,
+      "title": "Import from ZIP creates a new project (original name)",
+      "status": "pass",
+      "body": "Feeding a non-colliding full ZIP through the real hidden file input (change event) created 'Trialbook Imported' with its original name, 2 chapters, 2 restored outputs, and restored source blobs.",
+      "screenshots": [{"path": "shots/07-import-success.jpg", "caption": "Imported project appears in the list"}]
+    },
+    {
+      "id_num": 8,
+      "title": "Name-collision auto-rename",
+      "status": "pass",
+      "body": "Importing a ZIP whose project name matches an existing project appends ' (2)', then ' (3)' on a second import — no overwrite, no prompt. Original project retained.",
+      "screenshots": [{"path": "shots/11-collision-roundtrip.jpg", "caption": "Trialbook Alpha, Trialbook Alpha (2), Trialbook Alpha (3) all present"}]
+    },
+    {
+      "id_num": 9,
+      "title": "Import status feedback",
+      "status": "pass",
+      "body": "Captured status transitions during import: 'Importing...' (muted) then 'Project imported successfully.' in green (#10b981, rgb(16,185,129)), auto-clearing. Error path renders red (Test 10)."
+    },
+    {
+      "id_num": 10,
+      "title": "Invalid-file rejection",
+      "status": "borderline",
+      "body": "Both invalid inputs are rejected in red with no project created: (a) a non-ZIP file, and (b) a ZIP with only readme.txt -> 'Unrecognized ZIP format: expected project.json or .md files.' BORDERLINE: the non-ZIP case surfaces JSZip's raw internal message ('Can't find end of central directory : is this a zip file ? If it is, see https://...'), which is developer-facing. Functionally correct; recommend a friendlier message. Logged as a non-blocking follow-up.",
+      "output_sample": "non-ZIP -> \"Can't find end of central directory : is this a zip file ? ...\" (red, no project)\nbad ZIP -> \"Unrecognized ZIP format: expected project.json or .md files.\" (red, no project)"
+    },
+    {
+      "id_num": 11,
+      "title": "Export → import round-trip is byte-identical (after data-loss fix)",
+      "status": "pass",
+      "body": "Round-trip verified by byte-compare: re-exporting the imported copy produced sources/* and outputs/* byte-identical to the original export (all 5 payload files), and project.json content-equal ignoring volatile id/name/timestamps/blobIds.\n\nDATA-LOSS BUG FOUND & FIXED: importProject reused the chapter blobIds embedded in project.json. The IndexedDB `files` store is keyed by blobId, so importing a project whose blobIds already existed overwrote (re-parented) the existing blob records, silently deleting the original project's source files. Confirmed live: both the original and first import ended with 0 stored blobs. Fix: importProject now regenerates a fresh blobId + chapter id per chapter on import. Regression test added (exportImport Test 11); full suite 120/120 green; post-fix live re-run shows all projects retaining their own source blobs.",
+      "output_sample": "byte-equal outputs/00-index.md: True (805 vs 805)\nbyte-equal outputs/01-jury-selection.md: True (132)\nbyte-equal outputs/02-opening-statements.md: True (126)\nbyte-equal sources/01-jury-selection.txt: True (70)\nbyte-equal sources/02-opening-statements.txt: True (56)\nALL sources+outputs byte-identical: True"
+    }
+  ]
+}
