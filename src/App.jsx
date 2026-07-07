@@ -1,5 +1,13 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import * as mammoth from "mammoth";
+import { resolveInputs, resolveDataTransferItems } from "./inputResolver.js";
+import { convertRtf } from "./convertRtf.js";
+import { convertOdt } from "./convertOdt.js";
+import { isServerAvailable, convertViaServer } from "./serverApi.js";
+import { useProjectStore } from "./useProjectStore.js";
+import { ProjectList } from "./ProjectList.jsx";
+import { saveFile, saveBlob, smartFilename } from "./fileSaver.js";
+import { stripImageEmbeds } from "./stripImages.js";
 
 // ─── Chapter Number Inference ────────────────────────────────────────────────
 
@@ -31,7 +39,7 @@ function parseRoman(str) {
 }
 
 function inferChapterNum(filename) {
-  const base = filename.replace(/\.(docx|pdf)$/i, "");
+  const base = filename.replace(/\.(docx|pdf|rtf|odt|txt)$/i, "");
   const cleaned = base.replace(NOISE_RE, "").trim();
 
   // Strategy 1: Explicit chapter markers — CH1, Ch01, Chapter 3, Chap_04, ch-1
@@ -79,7 +87,7 @@ function inferChapterNum(filename) {
 }
 
 function inferCleanTitle(filename) {
-  const base = filename.replace(/\.(docx|pdf)$/i, "");
+  const base = filename.replace(/\.(docx|pdf|rtf|odt|txt)$/i, "");
   let cleaned = base.replace(NOISE_RE, "").trim();
   // Remove chapter prefixes
   cleaned = cleaned.replace(/^(?:ch(?:apter|ap)?)[.\s_-]*\d*[.\s_-]*/i, "");
@@ -174,6 +182,10 @@ function htmlToMarkdown(html) {
       case "img": {
         const alt = node.getAttribute("alt") || "";
         const src = node.getAttribute("src") || "";
+        // Strip binary content (base64 data URIs, media/ refs) — useless for RAG
+        if (/^data:|^media\//i.test(src)) {
+          return alt.trim() ? `[Image: ${alt.trim()}]` : "[Image removed]";
+        }
         return `![${alt}](${src})`;
       }
       case "sup": return `^${children}^`;
@@ -214,6 +226,8 @@ function cleanMarkdown(text) {
   t = t.replace(/([^\n])\n(#{1,6}\s)/g, "$1\n\n$2");
   // Replace tabs with spaces in heading lines
   t = t.replace(/^(#{1,6}\s.*)$/gm, line => line.replace(/\t/g, " "));
+  // Strip base64 data URI embeds and Pandoc media/ references (belt-and-suspenders for server-converted output)
+  t = stripImageEmbeds(t);
   return t.trim() + "\n";
 }
 
@@ -416,18 +430,6 @@ function buildIndexFile(chapters, book) {
   return lines.join("\n");
 }
 
-function downloadFile(filename, content) {
-  const blob = new Blob([content], { type: "text/markdown;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-}
-
 // ─── YAML Refresh & Download Utilities ───────────────────────────────────────
 
 function stripYamlFrontMatter(content) {
@@ -441,7 +443,7 @@ function refreshYaml(chapter, book) {
 
 function generateCombinedMarkdown(chapters, book) {
   const done = [...chapters]
-    .filter(c => c.status === "done")
+    .filter(c => c.status === "done" || c.status === "done-basic")
     .sort((a, b) => a.chapterNum - b.chapterNum);
   const parts = [
     `# ${book.title || "Untitled Book"}`,
@@ -463,7 +465,7 @@ async function generateZip(chapters, book) {
   const JSZip = (await import("jszip")).default;
   const zip = new JSZip();
   const done = [...chapters]
-    .filter(c => c.status === "done")
+    .filter(c => c.status === "done" || c.status === "done-basic")
     .sort((a, b) => a.chapterNum - b.chapterNum);
   for (const ch of done) {
     const fn = `${String(ch.chapterNum).padStart(2, "0")}-${ch.slug}.md`;
@@ -474,14 +476,8 @@ async function generateZip(chapters, book) {
   }
   zip.file("00-complete-book.md", generateCombinedMarkdown(chapters, book));
   const blob = await zip.generateAsync({ type: "blob" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `${slugify(book.title || "book")}-markdown.zip`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  const fn = smartFilename("zip", { bookTitle: book.title });
+  await saveBlob(fn, blob);
 }
 
 // ─── DOCX Conversion ─────────────────────────────────────────────────────────
@@ -538,6 +534,29 @@ async function convertDocx(file) {
   return { md, numberingLevels, hasHeadingStyles };
 }
 
+// ─── TXT Conversion ─────────────────────────────────────────────────────────
+
+async function convertTxt(file) {
+  let text;
+  try {
+    text = await file.text();
+  } catch {
+    // Fallback: try reading as Windows-1252 if UTF-8 fails
+    const buf = await file.arrayBuffer();
+    const decoder = new TextDecoder("windows-1252");
+    text = decoder.decode(buf);
+  }
+  // Preserve paragraphs as markdown paragraphs
+  const md = text
+    .replace(/\r\n/g, "\n")
+    .replace(/\r/g, "\n")
+    .split(/\n{2,}/)
+    .map(p => p.trim())
+    .filter(Boolean)
+    .join("\n\n");
+  return { md, numberingLevels: new Map(), hasHeadingStyles: false };
+}
+
 // ─── Components ──────────────────────────────────────────────────────────────
 
 function BookMeta({ book, onChange }) {
@@ -565,24 +584,53 @@ function BookMeta({ book, onChange }) {
   );
 }
 
-function UploadZone({ onFiles, compact }) {
+function UploadZone({ onFiles, onSkipped, onError, onResolving, compact }) {
   const [dragOver, setDragOver] = useState(false);
   const inputRef = useRef(null);
+  const folderInputRef = useRef(null);
+
+  const handleFolderInput = async (e) => {
+    const files = Array.from(e.target.files);
+    if (files.length) processFiles(files);
+    // Reset so the same folder can be selected again
+    e.target.value = "";
+  };
+
+  const processFiles = useCallback(async (rawFiles) => {
+    onResolving?.(true);
+    try {
+      const { files, skippedNames, errors } = await resolveInputs(rawFiles);
+      if (skippedNames.length) onSkipped?.(skippedNames);
+      if (errors.length) onError?.(errors);
+      if (files.length) onFiles(files);
+    } finally {
+      onResolving?.(false);
+    }
+  }, [onFiles, onSkipped, onError, onResolving]);
+
   const handleDrop = useCallback(
-    e => {
+    async (e) => {
       e.preventDefault();
+      e.stopPropagation(); // Prevent page-level drop handler from also processing these files
       if (!e.dataTransfer.types.includes("Files")) return;
       setDragOver(false);
-      const files = Array.from(e.dataTransfer.files).filter(
-        f => f.name.endsWith(".docx") || f.name.endsWith(".pdf")
-      );
-      if (files.length) onFiles(files);
+      // Use webkitGetAsEntry for folder support (must capture entries synchronously)
+      const items = e.dataTransfer.items;
+      if (items && items.length > 0) {
+        const rawFiles = await resolveDataTransferItems(items);
+        if (rawFiles.length) processFiles(rawFiles);
+      } else {
+        const files = Array.from(e.dataTransfer.files).filter(
+          f => /\.(docx|pdf|rtf|odt|txt|zip)$/i.test(f.name)
+        );
+        if (files.length) processFiles(files);
+      }
     },
-    [onFiles]
+    [processFiles]
   );
   const handleFileInput = e => {
     const files = Array.from(e.target.files);
-    if (files.length) onFiles(files);
+    if (files.length) processFiles(files);
   };
 
   if (compact) {
@@ -612,7 +660,7 @@ function UploadZone({ onFiles, compact }) {
           ref={inputRef}
           type="file"
           multiple
-          accept=".docx,.pdf"
+          accept=".docx,.pdf,.rtf,.odt,.txt,.zip"
           style={{ display: "none" }}
           onChange={handleFileInput}
         />
@@ -628,9 +676,31 @@ function UploadZone({ onFiles, compact }) {
           color: "var(--accent)",
           fontWeight: 700,
         }}>+</span>
+        <input
+          ref={folderInputRef}
+          type="file"
+          webkitdirectory=""
+          style={{ display: "none" }}
+          onChange={handleFolderInput}
+        />
         <span style={{ fontSize: 13, color: "var(--muted)", fontFamily: "var(--font-body)" }}>
           Drop more files or click to add
         </span>
+        <button
+          onClick={(e) => { e.stopPropagation(); folderInputRef.current?.click(); }}
+          style={{
+            marginLeft: "auto",
+            padding: "4px 10px",
+            fontSize: 11,
+            border: "1px solid var(--border)",
+            borderRadius: 5,
+            background: "transparent",
+            color: "var(--muted)",
+            cursor: "pointer",
+            fontFamily: "var(--font-body)",
+          }}
+          title="Select a folder of chapter files"
+        >&#128193; Folder</button>
       </div>
     );
   }
@@ -660,17 +730,39 @@ function UploadZone({ onFiles, compact }) {
         ref={inputRef}
         type="file"
         multiple
-        accept=".docx,.pdf"
+        accept=".docx,.pdf,.rtf,.odt,.txt,.zip"
         style={{ display: "none" }}
         onChange={handleFileInput}
       />
       <div style={{ fontSize: 36, marginBottom: 8 }}>&#128196;</div>
       <div style={{ fontSize: 15, color: "var(--text)", fontWeight: 600, fontFamily: "var(--font-body)" }}>
-        Drop DOCX or PDF files here
+        Drop DOCX, PDF, RTF, ODT, TXT, or ZIP files here
       </div>
       <div style={{ fontSize: 13, color: "var(--muted)", marginTop: 4, fontFamily: "var(--font-body)" }}>
         or click to browse
       </div>
+      <input
+        ref={folderInputRef}
+        type="file"
+        webkitdirectory=""
+        style={{ display: "none" }}
+        onChange={handleFolderInput}
+      />
+      <button
+        onClick={(e) => { e.stopPropagation(); folderInputRef.current?.click(); }}
+        style={{
+          marginTop: 12,
+          padding: "6px 14px",
+          fontSize: 12,
+          border: "1px solid var(--border)",
+          borderRadius: 6,
+          background: "transparent",
+          color: "var(--muted)",
+          cursor: "pointer",
+          fontFamily: "var(--font-body)",
+        }}
+        title="Select a folder of chapter files"
+      >&#128193; Select Folder</button>
     </div>
   );
 }
@@ -679,13 +771,16 @@ function ChapterRow({ ch, index, total, onUpdate, onRemove, onMove, onPreview, o
   const [expanded, setExpanded] = useState(false);
   const [topicInput, setTopicInput] = useState("");
   const [termInput, setTermInput] = useState("");
-  const fileTypeIcon = ch.fileType === "docx" ? "\uD83D\uDCD8" : "\uD83D\uDCD5";
+  const fileTypeIcons = { docx: "\uD83D\uDCD7", pdf: "\uD83D\uDCD5", rtf: "\uD83D\uDCC4", odt: "\uD83D\uDCD8", txt: "\uD83D\uDCDD" };
+  const fileTypeIcon = fileTypeIcons[ch.fileType] || "\uD83D\uDCC4";
   const statusColors = {
     pending: "var(--muted)",
     converting: "var(--accent)",
     done: "#22c55e",
+    "done-basic": "#f59e0b",
     error: "#ef4444",
     "pdf-notice": "#f59e0b",
+    "needs-server": "#f59e0b",
   };
 
   const dragClassName = [
@@ -769,9 +864,10 @@ function ChapterRow({ ch, index, total, onUpdate, onRemove, onMove, onPreview, o
               background: statusColors[ch.status] || "var(--muted)",
               flexShrink: 0,
             }}
+            title={ch.status === "done-basic" ? "Converted with basic formatting (use local API server for better quality)" : ""}
           />
         )}
-        {ch.status === "done" && (
+        {(ch.status === "done" || ch.status === "done-basic") && (
           <>
             <button style={linkBtnStyle} onClick={e => { e.stopPropagation(); onPreview(ch); }} title="Preview">Preview</button>
             <button style={linkBtnStyle} onClick={e => { e.stopPropagation(); onDownload(ch); }} title="Download">&#11015;</button>
@@ -873,20 +969,20 @@ function ChapterRow({ ch, index, total, onUpdate, onRemove, onMove, onPreview, o
 }
 
 function DownloadBar({ chapters, book, converting }) {
-  const done = chapters.filter(c => c.status === "done");
-  const total = chapters.filter(c => c.fileType === "docx").length;
+  const done = chapters.filter(c => c.status === "done" || c.status === "done-basic");
+  const total = chapters.filter(c => ["docx", "rtf", "odt", "txt", "pdf"].includes(c.fileType)).length;
 
   const downloadAllIndividual = () => {
     const sorted = [...done].sort((a, b) => a.chapterNum - b.chapterNum);
     sorted.forEach((ch, i) => {
       setTimeout(() => {
-        const fn = `${String(ch.chapterNum).padStart(2, "0")}-${ch.slug}.md`;
-        downloadFile(fn, refreshYaml(ch, book));
+        const fn = smartFilename("chapter", { chapterNum: ch.chapterNum, slug: ch.slug });
+        saveFile(fn, refreshYaml(ch, book), { forceFallback: true });
       }, i * 200);
     });
     if (sorted.length > 0) {
       setTimeout(() => {
-        downloadFile("00-index.md", buildIndexFile(sorted, book));
+        saveFile(smartFilename("index"), buildIndexFile(sorted, book), { forceFallback: true });
       }, sorted.length * 200);
     }
   };
@@ -912,7 +1008,7 @@ function DownloadBar({ chapters, book, converting }) {
         style={{ ...secondaryBtnStyle, opacity: done.length === 0 ? 0.5 : 1 }}
         onClick={() => {
           const combined = generateCombinedMarkdown(chapters, book);
-          downloadFile("00-complete-book.md", combined);
+          saveFile(smartFilename("combined"), combined);
         }}
         disabled={done.length === 0}
       >
@@ -1035,11 +1131,28 @@ const fileRowStyle = {
 // ─── Main App ────────────────────────────────────────────────────────────────
 
 export default function RAGConverter() {
-  const [book, setBook] = useState({ title: "", author: "" });
-  const [chapters, setChapters] = useState([]);
+  const {
+    book, setBook, chapters, setChapters,
+    activeProjectId, activeProjectName, projectList,
+    isDirty, saveStatus, bootStatus,
+    serverConnected,
+    save, load, switchProject, confirmSwitch, cancelSwitch, newProject,
+    renameProject, deleteProject,
+    exportProject: handleExportProject, importProject: handleImportProject,
+  } = useProjectStore();
   const [converting, setConverting] = useState(false);
   const [preview, setPreview] = useState(null);
   const [dragState, setDragState] = useState({ sourceIndex: null, overIndex: null, overPos: null });
+  const [resolving, setResolving] = useState(false);
+  const [skippedFiles, setSkippedFiles] = useState([]);
+  const [importErrors, setImportErrors] = useState([]);
+  const [projectNameInput, setProjectNameInput] = useState("");
+  const [showSwitchConfirm, setShowSwitchConfirm] = useState(null);
+
+  // Sync project name input when active project changes
+  useEffect(() => {
+    setProjectNameInput(activeProjectName);
+  }, [activeProjectName]);
 
   const chaptersRef = useRef(chapters);
   chaptersRef.current = chapters;
@@ -1068,7 +1181,11 @@ export default function RAGConverter() {
           id: crypto.randomUUID(),
           file: item.file,
           fileName: item.file.name,
-          fileType: item.file.name.endsWith(".pdf") ? "pdf" : "docx",
+          fileType: /\.pdf$/i.test(item.file.name) ? "pdf"
+            : /\.rtf$/i.test(item.file.name) ? "rtf"
+            : /\.odt$/i.test(item.file.name) ? "odt"
+            : /\.txt$/i.test(item.file.name) ? "txt"
+            : "docx",
           title: item.title,
           slug: slugify(item.title),
           chapterNum: num,
@@ -1161,28 +1278,69 @@ export default function RAGConverter() {
     convertingRef.current = true;
     setConverting(true);
 
-    // Mark PDFs as pdf-notice
-    setChapters(prev => prev.map(ch =>
-      ch.fileType === "pdf" && ch.status === "pending"
-        ? { ...ch, status: "pdf-notice" }
-        : ch
-    ));
+    // Check if local API server is available
+    const serverUp = await isServerAvailable();
 
-    // Get pending DOCX files to convert
-    const toConvert = chaptersRef.current.filter(c => c.status === "pending" && c.fileType === "docx");
+    // Mark PDFs as pdf-notice only if server is NOT available
+    if (!serverUp) {
+      setChapters(prev => prev.map(ch => {
+        if (ch.status !== "pending") return ch;
+        if (ch.fileType === "pdf") return { ...ch, status: "pdf-notice" };
+        return ch;
+      }));
+    }
+
+    // Get pending files to convert
+    const allConvertable = ["docx", "txt", "rtf", "odt"];
+    if (serverUp) allConvertable.push("pdf");
+    const toConvert = chaptersRef.current.filter(c => c.status === "pending" && allConvertable.includes(c.fileType));
 
     for (const ch of toConvert) {
       setChapters(prev => prev.map(c => c.id === ch.id ? { ...c, status: "converting" } : c));
 
       try {
-        const { md: rawMd, numberingLevels, hasHeadingStyles } = await convertDocx(ch.file);
-        let md = rawMd;
-        const detectedTitle = extractFirstHeading(md);
+        // Prefer server for PDF, RTF, ODT (higher quality). Use browser for DOCX, TXT.
+        const useServer = serverUp && ["pdf", "rtf", "odt"].includes(ch.fileType);
+        let md, isBasicQuality = false;
 
-        md = normalizeHeadings(md);
-        if (!hasHeadingStyles) {
-          md = detectAndPromoteHeadings(md, numberingLevels);
+        if (useServer) {
+          const result = await convertViaServer(ch.file);
+          md = result.markdown;
+        } else {
+          const converters = { docx: convertDocx, txt: convertTxt, rtf: convertRtf, odt: convertOdt };
+          const converter = converters[ch.fileType] || convertDocx;
+          const result = await converter(ch.file);
+          md = result.md;
+          isBasicQuality = result.isBasicQuality || false;
+
+          // Apply post-processing for browser-side conversions
+          const detectedTitle = extractFirstHeading(md);
+          md = normalizeHeadings(md);
+          if (!result.hasHeadingStyles) {
+            md = detectAndPromoteHeadings(md, result.numberingLevels);
+          }
+          md = cleanMarkdown(md);
+
+          // Build and prepend YAML header
+          setChapters(prev => prev.map(c => {
+            if (c.id !== ch.id) return c;
+            const title = (detectedTitle && !c.title) ? detectedTitle : c.title;
+            const slug = (detectedTitle && !c.title) ? slugify(detectedTitle) : c.slug;
+            const yaml = buildYamlHeader({ ...c, title, slug }, bookRef.current);
+            return {
+              ...c,
+              title,
+              slug,
+              markdownContent: yaml + md,
+              status: isBasicQuality ? "done-basic" : "done",
+            };
+          }));
+          continue;
         }
+
+        // Server-converted: post-process and set status
+        const detectedTitle = extractFirstHeading(md);
+        md = normalizeHeadings(md);
         md = cleanMarkdown(md);
 
         setChapters(prev => prev.map(c => {
@@ -1210,16 +1368,8 @@ export default function RAGConverter() {
 
   // Auto-trigger conversion 800ms after pending files appear
   useEffect(() => {
-    const hasPending = chapters.some(c => c.status === "pending" && c.fileType === "docx");
-    const hasPdfPending = chapters.some(c => c.status === "pending" && c.fileType === "pdf");
-
-    if (hasPdfPending) {
-      setChapters(prev => prev.map(ch =>
-        ch.fileType === "pdf" && ch.status === "pending"
-          ? { ...ch, status: "pdf-notice" }
-          : ch
-      ));
-    }
+    // All types are potentially convertible now (PDF via server)
+    const hasPending = chapters.some(c => c.status === "pending" && ["docx", "txt", "rtf", "odt", "pdf"].includes(c.fileType));
 
     if (!hasPending || convertingRef.current) return;
 
@@ -1238,20 +1388,53 @@ export default function RAGConverter() {
     }
   }, []);
 
-  const handlePageDrop = useCallback(e => {
+  const handlePageDrop = useCallback(async (e) => {
     if (!e.dataTransfer.types.includes("Files")) return;
     e.preventDefault();
-    const files = Array.from(e.dataTransfer.files).filter(
-      f => f.name.endsWith(".docx") || f.name.endsWith(".pdf")
-    );
-    if (files.length) addFiles(files);
+    setResolving(true);
+    try {
+      // Use webkitGetAsEntry for folder support
+      let rawFiles;
+      const items = e.dataTransfer.items;
+      if (items && items.length > 0) {
+        rawFiles = await resolveDataTransferItems(items);
+      } else {
+        rawFiles = Array.from(e.dataTransfer.files).filter(
+          f => /\.(docx|pdf|rtf|odt|txt|zip)$/i.test(f.name)
+        );
+      }
+      if (!rawFiles.length) return;
+      const { files, skippedNames, errors } = await resolveInputs(rawFiles);
+      if (skippedNames.length) setSkippedFiles(prev => [...prev, ...skippedNames]);
+      if (errors.length) setImportErrors(prev => [...prev, ...errors]);
+      if (files.length) addFiles(files);
+    } finally {
+      setResolving(false);
+    }
   }, [addFiles]);
 
   // ─── Derived state ───
-  const doneChapters = chapters.filter(c => c.status === "done");
+  const doneChapters = chapters.filter(c => c.status === "done" || c.status === "done-basic");
   const pdfNotice = chapters.filter(c => c.status === "pdf-notice");
+  const basicQuality = chapters.filter(c => c.status === "done-basic");
   const errors = chapters.filter(c => c.status === "error");
   const indexContent = doneChapters.length ? buildIndexFile(doneChapters, book) : null;
+
+  // ─── Boot loading gate ───
+  if (bootStatus !== "ready") {
+    return (
+      <div style={{
+        padding: "60px 24px",
+        maxWidth: 780,
+        margin: "0 auto",
+        fontFamily: "var(--font-body)",
+        color: "var(--muted)",
+        textAlign: "center",
+      }}>
+        Loading workspace...
+      </div>
+    );
+  }
 
   return (
     <div
@@ -1278,21 +1461,227 @@ export default function RAGConverter() {
     >
       {/* Header */}
       <div style={{ marginBottom: 28 }}>
-        <h1 style={{ fontSize: 22, fontWeight: 700, margin: 0, letterSpacing: "-0.02em" }}>
-          RAG Converter
-        </h1>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+          <h1 style={{ fontSize: 22, fontWeight: 700, margin: 0, letterSpacing: "-0.02em" }}>
+            RAG Converter
+          </h1>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            {/* Server status dot */}
+            <span
+              title={serverConnected
+                ? "Server connected \u2014 projects backed to disk"
+                : "Server offline \u2014 saving to browser only"
+              }
+              aria-hidden="true"
+              style={{
+                display: "inline-block", width: 8, height: 8,
+                borderRadius: "50%",
+                background: serverConnected ? "#10b981" : "#9ca3af",
+                cursor: "default",
+              }}
+            />
+            {/* Save-state badge */}
+            <span style={{
+              fontSize: 11,
+              fontFamily: "var(--font-mono)",
+              padding: "2px 8px",
+              borderRadius: 4,
+              background: saveStatus === "saved" ? "#d1fae5" : saveStatus === "saving" ? "#fef3c7" : "#fef2f2",
+              color: saveStatus === "saved" ? "#065f46" : saveStatus === "saving" ? "#92400e" : "#991b1b",
+            }}>
+              {saveStatus === "saved" ? "Saved" : saveStatus === "saving" ? "Saving..." : "Unsaved"}
+            </span>
+          </div>
+        </div>
+
+        {/* Project name + save controls */}
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+          <input
+            type="text"
+            value={projectNameInput}
+            placeholder="Project name..."
+            onChange={e => setProjectNameInput(e.target.value)}
+            style={{
+              flex: 1,
+              padding: "6px 10px",
+              fontSize: 14,
+              fontFamily: "var(--font-body)",
+              border: "1px solid var(--border)",
+              borderRadius: 6,
+              background: "var(--bg)",
+              color: "var(--text)",
+              outline: "none",
+            }}
+          />
+          <button
+            onClick={() => save(projectNameInput.trim() || "Untitled")}
+            style={{
+              padding: "6px 16px",
+              fontSize: 13,
+              fontFamily: "var(--font-body)",
+              fontWeight: 600,
+              border: "1px solid var(--accent)",
+              borderRadius: 6,
+              background: "var(--accent)",
+              color: "#fff",
+              cursor: "pointer",
+            }}
+          >
+            Save
+          </button>
+          <button
+            onClick={newProject}
+            style={{
+              padding: "6px 12px",
+              fontSize: 13,
+              fontFamily: "var(--font-body)",
+              border: "1px solid var(--border)",
+              borderRadius: 6,
+              background: "var(--bg)",
+              color: "var(--text)",
+              cursor: "pointer",
+            }}
+          >
+            New
+          </button>
+        </div>
+
         <p style={{ fontSize: 13, color: "var(--muted)", margin: "4px 0 0", lineHeight: 1.5 }}>
-          Convert DOCX chapters to RAG-optimized Markdown &mdash; with YAML metadata, heading normalization, and a cross-reference index.
+          Convert DOCX, PDF, RTF, ODT, and TXT chapters to RAG-optimized Markdown &mdash; with YAML metadata, heading normalization, and a cross-reference index.
         </p>
       </div>
 
+      <ProjectList
+        projects={projectList}
+        activeProjectId={activeProjectId}
+        isDirty={isDirty}
+        onSwitch={async (id) => {
+          const result = await switchProject(id);
+          if (result?.blocked) {
+            setShowSwitchConfirm(result.pendingId);
+          }
+        }}
+        onNew={newProject}
+        onRename={renameProject}
+        onDelete={deleteProject}
+        onExport={handleExportProject}
+        onImport={handleImportProject}
+      />
+
+      {/* Unsaved-changes confirmation modal */}
+      {showSwitchConfirm && (
+        <div style={{
+          position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 1000,
+          display: "flex", justifyContent: "center", alignItems: "center",
+        }}>
+          <div style={{
+            background: "var(--bg)", borderRadius: 12, padding: 24, maxWidth: 400,
+            border: "1px solid var(--border)", boxShadow: "0 8px 32px rgba(0,0,0,0.2)",
+          }}>
+            <h3 style={{ margin: "0 0 8px", fontSize: 16, fontWeight: 700 }}>Unsaved Changes</h3>
+            <p style={{ fontSize: 13, color: "var(--muted)", margin: "0 0 16px", lineHeight: 1.5 }}>
+              You have unsaved changes. Switch projects anyway? Your changes will be lost.
+            </p>
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              <button
+                onClick={() => { cancelSwitch(); setShowSwitchConfirm(null); }}
+                style={{
+                  padding: "6px 16px", fontSize: 13, border: "1px solid var(--border)",
+                  borderRadius: 6, background: "var(--bg)", color: "var(--text)", cursor: "pointer",
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => { await confirmSwitch(); setShowSwitchConfirm(null); }}
+                style={{
+                  padding: "6px 16px", fontSize: 13, border: "1px solid #dc2626",
+                  borderRadius: 6, background: "#dc2626", color: "#fff", cursor: "pointer", fontWeight: 600,
+                }}
+              >
+                Discard &amp; Switch
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <BookMeta book={book} onChange={setBook} />
 
-      <UploadZone onFiles={addFiles} compact={chapters.length > 0} />
+      <UploadZone
+        onFiles={addFiles}
+        onSkipped={names => setSkippedFiles(prev => [...prev, ...names])}
+        onError={errs => setImportErrors(prev => [...prev, ...errs])}
+        onResolving={setResolving}
+        compact={chapters.length > 0}
+      />
 
       {/* Download bar — visible when any conversions exist */}
       {(doneChapters.length > 0 || converting) && (
         <DownloadBar chapters={chapters} book={book} converting={converting} />
+      )}
+
+      {/* Resolving indicator (ZIP extraction / folder scanning) */}
+      {resolving && (
+        <div style={{
+          padding: 16,
+          background: "var(--accent-bg)",
+          borderRadius: 8,
+          marginBottom: 16,
+          fontSize: 13,
+          fontFamily: "var(--font-body)",
+          color: "var(--accent)",
+        }}>
+          Extracting files&hellip;
+        </div>
+      )}
+
+      {/* Skipped files notice (dismissible) */}
+      {skippedFiles.length > 0 && (
+        <div style={{
+          padding: "12px 16px",
+          background: "#fef3c7",
+          borderRadius: 8,
+          marginBottom: 16,
+          fontSize: 13,
+          fontFamily: "var(--font-body)",
+          color: "#92400e",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "flex-start",
+        }}>
+          <div>
+            <strong>{skippedFiles.length} file{skippedFiles.length > 1 ? "s" : ""} skipped</strong> (unsupported: {skippedFiles.slice(0, 5).join(", ")}{skippedFiles.length > 5 ? `, +${skippedFiles.length - 5} more` : ""})
+          </div>
+          <button
+            onClick={() => setSkippedFiles([])}
+            style={{ background: "none", border: "none", color: "#92400e", cursor: "pointer", fontSize: 16, padding: "0 0 0 8px", lineHeight: 1 }}
+          >&times;</button>
+        </div>
+      )}
+
+      {/* Import errors */}
+      {importErrors.length > 0 && (
+        <div style={{
+          padding: "12px 16px",
+          background: "#fef2f2",
+          borderRadius: 8,
+          marginBottom: 16,
+          fontSize: 13,
+          fontFamily: "var(--font-body)",
+          color: "#991b1b",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "flex-start",
+        }}>
+          <div>
+            <strong>Import error{importErrors.length > 1 ? "s" : ""}:</strong> {importErrors.join("; ")}
+          </div>
+          <button
+            onClick={() => setImportErrors([])}
+            style={{ background: "none", border: "none", color: "#991b1b", cursor: "pointer", fontSize: 16, padding: "0 0 0 8px", lineHeight: 1 }}
+          >&times;</button>
+        </div>
       )}
 
       {/* Converting indicator */}
@@ -1309,7 +1698,7 @@ export default function RAGConverter() {
           backgroundSize: "200% 100%",
           animation: "shimmer 1.5s infinite",
         }}>
-          Converting files via mammoth.js&hellip; DOCX files convert in-browser. PDF files require CLI tools.
+          Converting files&hellip; DOCX and TXT convert in-browser. PDF, RTF, and ODT use the local API server when available.
         </div>
       )}
 
@@ -1326,7 +1715,7 @@ export default function RAGConverter() {
               <span style={{ fontFamily: "var(--font-mono)", fontSize: 13, flex: 1, color: "var(--text)" }}>00-index.md</span>
               <span style={{ fontSize: 12, color: "var(--muted)", fontFamily: "var(--font-body)" }}>Index</span>
               <button style={linkBtnStyle} onClick={() => setPreview({ name: "00-index.md", content: indexContent })}>Preview</button>
-              <button style={linkBtnStyle} onClick={() => downloadFile("00-index.md", indexContent)}>&#11015;</button>
+              <button style={linkBtnStyle} onClick={() => saveFile(smartFilename("index"), indexContent)}>&#11015;</button>
             </div>
           )}
 
@@ -1349,8 +1738,8 @@ export default function RAGConverter() {
                 setPreview({ name: fn, content: refreshYaml(ch, book) });
               }}
               onDownload={ch => {
-                const fn = `${String(ch.chapterNum).padStart(2, "0")}-${ch.slug}.md`;
-                downloadFile(fn, refreshYaml(ch, book));
+                const fn = smartFilename("chapter", { chapterNum: ch.chapterNum, slug: ch.slug });
+                saveFile(fn, refreshYaml(ch, book));
               }}
             />
           ))}
@@ -1360,13 +1749,23 @@ export default function RAGConverter() {
       {/* Notices */}
       {pdfNotice.length > 0 && (
         <div style={{ padding: 16, background: "#fef3c7", borderRadius: 8, marginBottom: 16, fontSize: 13, fontFamily: "var(--font-body)", color: "#92400e" }}>
-          <strong>{pdfNotice.length} PDF file{pdfNotice.length > 1 ? "s" : ""} skipped.</strong> Browser-based PDF conversion lacks the structural detection that Marker provides. Use the CLI toolkit (<code>convert.py</code>) for PDF files.
+          <strong>{pdfNotice.length} PDF file{pdfNotice.length > 1 ? "s" : ""} skipped.</strong> Start the local API server (<code>python server.py</code>) for browser-based PDF conversion, or use the CLI toolkit (<code>convert.py</code>).
+        </div>
+      )}
+
+      {basicQuality.length > 0 && (
+        <div style={{ padding: 16, background: "#fef3c7", borderRadius: 8, marginBottom: 16, fontSize: 13, fontFamily: "var(--font-body)", color: "#92400e" }}>
+          <strong>{basicQuality.length} file{basicQuality.length > 1 ? "s" : ""} converted with basic formatting.</strong> For higher quality RTF/ODT conversion, start the local API server (<code>python server.py</code>) which uses Pandoc.
         </div>
       )}
 
       {errors.length > 0 && (
-        <div style={{ padding: 16, background: "#fef2f2", borderRadius: 8, marginBottom: 16, fontSize: 13, fontFamily: "var(--font-body)", color: "#991b1b" }}>
-          <strong>{errors.length} file{errors.length > 1 ? "s" : ""} failed.</strong> Check the console for details.
+        <div style={{ padding: 16, background: "#fef2f2", borderRadius: 8, marginBottom: 16, fontSize: 13, fontFamily: "var(--font-body)", color: "#991b1b", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <span><strong>{errors.length} file{errors.length > 1 ? "s" : ""} failed.</strong> Check the console for details.</span>
+          <button
+            onClick={() => setChapters(prev => prev.map(c => c.status === "error" ? { ...c, status: "pending" } : c))}
+            style={{ padding: "4px 10px", fontSize: 12, border: "1px solid #991b1b", borderRadius: 5, background: "transparent", color: "#991b1b", cursor: "pointer", fontFamily: "var(--font-body)", flexShrink: 0 }}
+          >Retry all</button>
         </div>
       )}
 
@@ -1407,7 +1806,7 @@ export default function RAGConverter() {
 
       {/* Footer */}
       <div style={{ marginTop: 40, paddingTop: 16, borderTop: "1px solid var(--border)", fontSize: 11, color: "var(--muted)", fontFamily: "var(--font-body)" }}>
-        DOCX converts in-browser via mammoth.js. PDF files require CLI tools &mdash; use the <code>convert.py</code> script with Marker or PyMuPDF4LLM. Press Enter after typing a topic or key term to add it.
+        DOCX and TXT convert in-browser. PDF, RTF, and ODT require the local API server (<code>python server.py</code>) or CLI tools. Press Enter after typing a topic or key term to add it.
       </div>
     </div>
   );

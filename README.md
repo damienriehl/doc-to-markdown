@@ -54,3 +54,20 @@ Each chapter file includes:
 - Stripped conversion artifacts
 
 The index file (`00-index.md`) maps chapters to core concepts and cross-references.
+
+## Web App: Projects (Save / Export / Import)
+
+The browser app (`npm run dev`) persists work as named **projects** in IndexedDB.
+From the project list you can:
+
+- **Export** a project as a ZIP in two modes:
+  - **Full project** — `project.json` + `sources/` (original uploads) + `outputs/` (generated Markdown, incl. `00-index.md`).
+  - **Outputs only** — a flat ZIP of just the `.md` files.
+- **Import** a previously exported ZIP. A full ZIP restores sources and outputs; an
+  outputs-only ZIP reconstructs chapters from the `.md` filenames. Imports always get
+  a fresh identity (project id and per-chapter blob ids are regenerated), so importing
+  the same ZIP twice never overwrites or corrupts an existing project. A name collision
+  auto-appends ` (2)`, ` (3)`, etc.
+
+Round-trip is lossless: exporting an imported project yields byte-identical `sources/`
+and `outputs/` files. See `docs/evidence/uat-04/` for the verified UAT pack.

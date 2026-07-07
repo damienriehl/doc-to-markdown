@@ -4,6 +4,10 @@ Markdown Post-Processor
 ========================
 Cleans conversion artifacts from Pandoc/Marker output and injects
 YAML front matter optimized for RAG retrieval.
+
+Includes image stripping: base64 data URI embeds and Pandoc media/ references
+are replaced with [Image: alt] or [Image removed] placeholders to prevent
+context window bloat in RAG consumers.
 """
 
 import re
@@ -67,6 +71,20 @@ class PostProcessor:
         # Fix broken Markdown links from Pandoc (spaces in URLs)
         text = re.sub(r"\]\(\s+", "](", text)
         text = re.sub(r"\s+\)", ")", text)
+
+        # Strip base64 data URI image/audio embeds (from PDF engines, mammoth, etc.)
+        # Must run before empty-link cluster stripping so ![](data:...) is not swallowed.
+        text = re.sub(
+            r"!\[([^\]]*)\]\(data:[^)]+\)",
+            lambda m: f"[Image: {m.group(1).strip()}]" if m.group(1).strip() else "[Image removed]",
+            text,
+        )
+        # Strip Pandoc media directory references (useless without actual image files)
+        text = re.sub(
+            r"!\[([^\]]*)\]\(media/[^)]+\)",
+            lambda m: f"[Image: {m.group(1).strip()}]" if m.group(1).strip() else "[Image removed]",
+            text,
+        )
 
         # Strip empty markdown link clusters (Word bookmark artifacts)
         text = re.sub(r"(\[\]\(#?[^)]*\))+", "", text)

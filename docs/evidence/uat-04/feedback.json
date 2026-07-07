@@ -1,0 +1,16 @@
+{
+  "pack_id": "D2M-UAT04",
+  "title": "doc-to-markdown — Phase 4 Export/Import UAT",
+  "rubric_version": "manual-uat-04-export-import",
+  "exported_count": 0,
+  "total_findings": 11,
+  "comments": [],
+  "_schema": {
+    "comments[]": {
+      "id": "EP-<REPO>-<CAMPAIGN>-<NNN>",
+      "title": "str",
+      "status": "pass|borderline|fail|info",
+      "comment": "reviewer text"
+    }
+  }
+}
