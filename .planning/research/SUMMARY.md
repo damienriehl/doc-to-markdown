@@ -212,11 +212,13 @@ even for the 5–15 concurrent projects in the core value statement.
 
 **Consequence:** no size gate, and no server dependency for file storage. This is
 already what ships — `src/projectDb.js` puts every blob in the `files` store keyed
-by `blobId` with no size branch, and `serverApi.js` has no upload path. The
-optional `server.py` remains a *conversion-quality* path (Pandoc/Marker), never a
-storage path. The main-thread-blocking pitfall the gate was meant to dodge does
-not arise at these sizes; if a genuinely huge source ever appears, the fix is a
-Web Worker for the write (PITFALLS.md), not a server round-trip.
+by `blobId` with no size branch. `serverApi.js` touches the server for exactly two
+things, neither of them blob storage: `saveProjectToServer()` POSTs the project
+*metadata* JSON, and `convertViaServer()` POSTs a single file to `/convert` and
+gets Markdown back — a *conversion-quality* path (Pandoc/Marker), not a storage
+path. The main-thread-blocking pitfall the gate was meant to dodge does not arise
+at these sizes; if a genuinely huge source ever appears, the fix is a Web Worker
+for the write (PITFALLS.md), not a server round-trip.
 
 ### Gaps to Address
 
