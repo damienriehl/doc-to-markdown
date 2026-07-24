@@ -12,7 +12,9 @@ doc-to-markdown (`rag-converter`) is licensed **MIT** (see `LICENSE`). It incorp
 | dexie | Apache-2.0 | IndexedDB wrapper |
 | jszip | MIT (dual MIT-or-GPL — MIT elected here) | ZIP extraction |
 | mammoth | BSD-2-Clause | Browser-side DOCX → HTML/Markdown |
-| vite, vitest | MIT | Build / test tooling |
+| vite, vitest, @vitejs/plugin-react | MIT | Build / test tooling |
+| fake-indexeddb | Apache-2.0 | IndexedDB shim for the Vitest suite (test-only) |
+| Source Sans 3, IBM Plex Mono | OFL-1.1 | Web fonts **loaded from Google Fonts at runtime** (`index.html`), not vendored or redistributed here |
 
 ### Optional local pipeline (Python, installed via `setup.sh`)
 
@@ -22,6 +24,7 @@ These power the optional CLI/`server.py` conversion path and are run as separate
 |-----------|---------|-------|
 | fastapi | MIT | Local API server |
 | uvicorn | BSD-3-Clause | ASGI server |
+| python-multipart | Apache-2.0 | File uploads to the local API server |
 | python-docx | MIT | DOCX handling |
 | pyyaml | MIT | Chapter config |
 | regex | Apache-2.0 / PSF | Post-processing |
