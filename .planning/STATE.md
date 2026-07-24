@@ -110,7 +110,7 @@ None yet.
 
 ### Blockers/Concerns
 
-- [Phase 1]: Verify actual source file sizes before finalizing the 5 MB size gate (metadata in IDB vs. blobs server-side). If files are consistently under 5 MB, server dependency for file storage may be eliminated.
+- [RESOLVED - 2026-07-24]: **The 5 MB size gate is not needed — measured, not estimated.** RESEARCH assumed a "1–50 MB per file" range and proposed routing blobs over 5 MB to server-side storage. Measuring the real corpus (Damien's three source books, 39 `.docx`/`.pdf` files) shows the assumption was wrong by an order of magnitude: **16.0 MB total, median 0.14 MB, p95 1.32 MB, exactly one file over 5 MB (8.36 MB)**. Largest single book = 10.4 MB across 12 files. Every project therefore fits in IndexedDB with enormous headroom, which is what the shipped `projectDb.js` already does (all blobs in the `files` store, keyed by `blobId`, no size branch). **Decision: no size gate, no server dependency for file storage.** The optional `server.py` stays a conversion-quality path (Pandoc/Marker), not a storage path. See "Measured source-file sizes" in `.planning/research/SUMMARY.md`.
 - [RESOLVED - 01-01]: The project.json schema v1 fields validated against App.jsx state shape — projectSerializer.js written and tested.
 
 ### Quick Tasks Completed

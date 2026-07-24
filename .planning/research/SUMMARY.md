@@ -192,11 +192,37 @@ Phases with standard patterns (skip `/gsd:research-phase`):
 
 **Overall confidence:** HIGH
 
+### Measured source-file sizes (2026-07-24) — supersedes the 5 MB gate
+
+The 5 MB size gate throughout this research (IDB for small blobs, server-side for
+large ones) rested on an *estimated* "1–50 MB per file" range. That estimate was
+never checked against the actual corpus. It has now been measured across the three
+real source books in `folio-insights-sources/Originals/`:
+
+| Book | Files | Total | Median | Max | Files > 5 MB |
+|------|-------|-------|--------|-----|--------------|
+| Trial Advocacy (2024) | 12 | 10.4 MB | 0.178 MB | 8.36 MB | 1 |
+| Pretrial Litigation (2025) | 20 | 3.6 MB | 0.119 MB | 1.16 MB | 0 |
+| Trialbook — Sonsteng & Haydock (2025) | 7 | 2.0 MB | 0.111 MB | 1.32 MB | 0 |
+| **All** | **39** | **16.0 MB** | **0.142 MB** | **8.36 MB** | **1** |
+
+The real distribution is an order of magnitude smaller than assumed: p95 is
+**1.32 MB**, and a whole book is ~10 MB — comfortably inside IndexedDB's quota
+even for the 5–15 concurrent projects in the core value statement.
+
+**Consequence:** no size gate, and no server dependency for file storage. This is
+already what ships — `src/projectDb.js` puts every blob in the `files` store keyed
+by `blobId` with no size branch, and `serverApi.js` has no upload path. The
+optional `server.py` remains a *conversion-quality* path (Pandoc/Marker), never a
+storage path. The main-thread-blocking pitfall the gate was meant to dodge does
+not arise at these sizes; if a genuinely huge source ever appears, the fix is a
+Web Worker for the write (PITFALLS.md), not a server round-trip.
+
 ### Gaps to Address
 
 - **Safari ITP 7-day eviction is unverifiable in development without simulating time.** The design decision (server = authoritative, IDB = cache) mitigates this at the architecture level, but the specific behavior of `navigator.storage.persist()` on Safari for installed PWAs vs. regular browser tabs should be documented in the project README rather than assumed.
 
-- **File size distribution for this project is estimated, not measured.** The 5 MB size gate (metadata in IDB vs. blobs server-side) is based on the stated "1–50 MB per file" range. If actual source files are consistently under 5 MB, all blobs can go in IndexedDB and the server dependency for file storage is eliminated. Measure actual file sizes in Phase 1 before finalizing the size gate.
+- ~~**File size distribution for this project is estimated, not measured.**~~ **CLOSED 2026-07-24 — measured; see "Measured source-file sizes" below. No size gate ships.**
 
 - **The `project.json` schema version 1 is illustrative, not finalized.** The schema in ARCHITECTURE.md is a well-structured starting point, but the exact fields for chapter assignment confidence, conversion quality indicators, and UI state must be validated against `App.jsx`'s actual state shape before `projectSerializer.js` is written.
 
